@@ -7,16 +7,16 @@ using Unity.IL2CPP.Building.ToolChains.MsvcVersions;
 
 namespace csb2
 {
-    public class ObjectNode : GeneratedFileNode
+    public class ObjectNode : GeneratedFileNode, IHaveObjectNodes
     {
-        private readonly SourceFileNode _cppFile;
+        private readonly FileNode _cppFile;
 
-        public ObjectNode(SourceFileNode cppFile, NPath objectFile) : base(objectFile)
+        public ObjectNode(FileNode cppFile, NPath objectFile) : base(objectFile)
         {
             _cppFile = cppFile;
         }
 
-        public override IEnumerable<Node> Dependencies
+        public override IEnumerable<Node> StaticDependencies
         {
             get { yield return _cppFile; }
         }
@@ -25,17 +25,19 @@ namespace csb2
         {
             var includeArguments = new StringBuilder();
             foreach (var includeDir in MsvcInstallation.GetLatestInstalled().GetIncludeDirectories())
-                includeArguments.Append("-I" + includeDir.InQuotes()+" ");
-            
+                includeArguments.Append("-I" + includeDir.InQuotes() + " ");
+
             var args = new Shell.ExecuteArgs
             {
-                Arguments = includeArguments+ _cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c",
+                Arguments = includeArguments + _cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c",
                 Executable = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "cl.exe").ToString()
             };
 
             Shell.ExecuteAndCaptureOutput(args);
             return true;
         }
+
+        public ObjectNode[] ObjectNodes => new[] {this};
     }
 
     public class UpdateReason
@@ -55,11 +57,11 @@ namespace csb2
 
     class AliasNode : Node
     {
-        private readonly Node[] _dependencies;
+        private readonly Node[] _staticDependencies;
 
-        public AliasNode(string name, Node[] dependencies) : base(name)
+        public AliasNode(string name, Node[] staticDependencies) : base(name)
         {
-            _dependencies = dependencies;
+            _staticDependencies = staticDependencies;
         }
 
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
@@ -67,6 +69,6 @@ namespace csb2
             return null;
         }
 
-        public override IEnumerable<Node> Dependencies => _dependencies;
+        public override IEnumerable<Node> StaticDependencies => _staticDependencies;
     }
 }

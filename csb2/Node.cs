@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using NiceIO;
 
 namespace csb2
@@ -9,7 +10,10 @@ namespace csb2
         public string Name { get; }
         public State State { get; set; }
         public UpdateReason UpdateReason { get; private set; }
-        public virtual IEnumerable<Node> Dependencies { get{ yield break;}}
+        public virtual IEnumerable<Node> StaticDependencies { get{ yield break;}}
+        public virtual IEnumerable<Node> DynamicDependencies {  get { yield break; } }
+
+        public IEnumerable<Node> AllDependencies => StaticDependencies.Concat(DynamicDependencies);
 
         protected Node(string name)
         {
@@ -35,6 +39,10 @@ namespace csb2
         {
             UpdateReason = updateReason;
         }
+
+        public virtual void SetupDynamicDependencies()
+        {
+        }
     }
 
     class NodeGraph
@@ -58,7 +66,8 @@ namespace csb2
     {
         NotProcessed,
         UpToDate,
-        DependenciesReady,
+        StaticDependenciesReady,
+        AllDependenciesReady,
         Building,
         Failed
     }

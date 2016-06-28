@@ -20,7 +20,7 @@ namespace csb2
             if (file.TimeStamp > e.TimeStamp)
                 return new UpdateReason($"Previous build that we made had a timestamp of {e.TimeStamp}, but the generated file on disk has a timestamp of {file.TimeStamp}");
 
-            foreach (var dep in Dependencies)
+            foreach (var dep in AllDependencies)
             {
                 var fileDep = dep as FileNode;
 
@@ -28,6 +28,7 @@ namespace csb2
                     return new UpdateReason($"Dependency {dep} has a timestamp ({fileDep.TimeStamp}) newer than the timestamp of the generated file we had previously built ({e.TimeStamp}");
             }
 
+            TimeStamp = file.TimeStamp;
             return null;
         }
 

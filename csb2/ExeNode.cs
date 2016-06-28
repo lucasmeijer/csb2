@@ -9,14 +9,25 @@ namespace csb2
 {
     public class ExeNode : GeneratedFileNode
     {
-        private readonly ObjectNode[] _objectNodes;
+        private readonly ObjectsNode _objectsNode;
+        private ObjectNode[] _objectNodes;
 
-        public ExeNode(NPath exeFile, ObjectNode[] objectNodes) : base(exeFile)
+        public ExeNode(NPath exeFile, ObjectsNode objectsNode) : base(exeFile)
         {
-            _objectNodes = objectNodes;
+            _objectsNode = objectsNode;
         }
 
-        public override IEnumerable<Node> Dependencies => _objectNodes;
+        public override IEnumerable<Node> StaticDependencies
+        {
+            get { yield return _objectsNode; }
+        }
+
+        public override void SetupDynamicDependencies()
+        {
+            _objectNodes = _objectsNode.ObjectNodes;
+        }
+
+        public override IEnumerable<Node> DynamicDependencies => _objectNodes;
 
         protected override bool BuildGeneratedFile()
         {
@@ -24,7 +35,7 @@ namespace csb2
                 
             var args = new Shell.ExecuteArgs
             {
-                Arguments = libPaths +" "+ _objectNodes.Select(o=>o.File).InQuotes().SeperateWithSpace() + " /OUT:" + File.InQuotes(),
+                Arguments = libPaths +" "+ _objectsNode.ObjectNodes.Select(o=>o.File).InQuotes().SeperateWithSpace() + " /OUT:" + File.InQuotes(),
                 Executable = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "link.exe").ToString()
             };
 
