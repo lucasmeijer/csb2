@@ -1,19 +1,16 @@
+using System;
 using NiceIO;
 
 namespace csb2
 {
-    public class FileNode : Node
+    public abstract class FileNode : Node
     {
-        public NPath File { get; private set; }
+        public NPath File { get; }
+        public DateTime TimeStamp { get; protected set; }
 
-        public FileNode(NPath file) : base(file.ToString())
+        protected FileNode(NPath file) : base(file.ToString())
         {
             File = file;
-        }
-
-        public override bool DetermineNeedToBuild(PreviousBuildsDatabase db)
-        {
-            return true;
         }
     }
 }

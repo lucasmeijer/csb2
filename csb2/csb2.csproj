@@ -47,8 +47,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Architecture.cs" />
+    <Compile Include="Builder.cs" />
     <Compile Include="ExeNode.cs" />
     <Compile Include="FileNode.cs" />
+    <Compile Include="GeneratedFileNode.cs" />
+    <Compile Include="SourceFileNode.cs" />
     <Compile Include="Msvc10Installation.cs" />
     <Compile Include="Msvc12Installation.cs" />
     <Compile Include="Msvc14Installation.cs" />

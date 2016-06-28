@@ -32,23 +32,28 @@ namespace csb2
                 return;
             var job = m_Jobs.Dequeue();
 
-            Console.WriteLine("Building: "+job);
+            Console.WriteLine("Building: "+job+ " Reason: "+job.UpdateReason);
             if (!job.Build())
             {
-                job.SetState(State.Failed);
+                job.State = State.Failed;
                 throw new BuildFailedException("Failed building " + job);
             }
-            job.SetState(State.UpToDate);
+            job.State = State.UpToDate;
 
-            _previousBuildsDatabase.SetInfoFor(job.Name, new PreviousBuildsDatabase.Entry() {TimeStamp = new NPath(job.Name).TimeStamp});
+            var generatedFileNode = job as GeneratedFileNode;
+            if (generatedFileNode != null)
+                _previousBuildsDatabase.SetInfoFor(new PreviousBuildsDatabase.Entry() {Name = job.Name, TimeStamp = generatedFileNode.TimeStamp});
         }
 
         private bool DoPass(Node nodeToBuild)
         {
-            if (nodeToBuild.GetState() == State.UpToDate)
+            if (nodeToBuild.State == State.UpToDate)
                 return true;
 
-            if (nodeToBuild.GetState() == State.NotProcessed)
+            if (nodeToBuild.State == State.Building)
+                return false;
+
+            if (nodeToBuild.State == State.NotProcessed)
             {
                 bool allUpToDate = true;
                 foreach (var dep in nodeToBuild.Dependencies)
@@ -58,20 +63,22 @@ namespace csb2
                         allUpToDate = false;
                 }
                 if (allUpToDate)
-                    nodeToBuild.SetState(State.DependenciesReady);
+                    nodeToBuild.State = State.DependenciesReady;
                 else
                     return false;
             }
 
-            if (nodeToBuild.GetState() == State.DependenciesReady)
+            if (nodeToBuild.State == State.DependenciesReady)
             {
-                var needToBuild = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
-                if (!needToBuild)
+                var updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
+                if (updateReason == null)
                 {
-                    nodeToBuild.SetState(State.UpToDate);
+                    Console.WriteLine("Already UpToDate: "+nodeToBuild);
+                    nodeToBuild.State = State.UpToDate;
                     return true;
                 }
-                nodeToBuild.SetState(State.Building);
+                nodeToBuild.SetUpdateReason(updateReason);
+                nodeToBuild.State = State.Building;
                 QueueJob(nodeToBuild);
                 return false;
             }

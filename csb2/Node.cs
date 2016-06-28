@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using NiceIO;
 
 namespace csb2
@@ -8,8 +7,8 @@ namespace csb2
     public abstract class Node
     {
         public string Name { get; }
-        public DateTime TimeStamp { get; protected set; }
-        private State m_State;
+        public State State { get; set; }
+        public UpdateReason UpdateReason { get; private set; }
         public virtual IEnumerable<Node> Dependencies { get{ yield break;}}
 
         protected Node(string name)
@@ -17,18 +16,10 @@ namespace csb2
             Name = name;
         }
 
-        public State GetState()
+        public virtual UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
-            return m_State;
+            return new UpdateReason($"Nodes of type {GetType()} always rebuild");
         }
-
-        public void SetState(State state)
-        {
-            m_State = state;
-        }
-
-        public abstract bool DetermineNeedToBuild(PreviousBuildsDatabase db);
-
 
         public virtual bool Build()
         {
@@ -39,6 +30,11 @@ namespace csb2
         {
             return Name;
         }
+
+        public void SetUpdateReason(UpdateReason updateReason)
+        {
+            UpdateReason = updateReason;
+        }
     }
 
     class NodeGraph
@@ -48,86 +44,6 @@ namespace csb2
         public void AddNode(Node n)
         {
             _nodes.Add(n);
-        }
-    }
-
-    class Builder
-    {
-        private readonly PreviousBuildsDatabase _previousBuildsDatabase;
-        private readonly Queue<Node> m_Jobs = new Queue<Node>();
-
-        public Builder(PreviousBuildsDatabase previousBuildsDatabase)
-        {
-            _previousBuildsDatabase = previousBuildsDatabase;
-        }
-
-        public void Build(Node nodeToBuild)
-        {
-            while (true)
-            {
-                if (DoPass(nodeToBuild))
-                    return;
-
-                PumpJobs();
-            }
-        }
-
-        private void PumpJobs()
-        {
-            if (!m_Jobs.Any())
-                return;
-            var job = m_Jobs.Dequeue();
-
-            System.Console.WriteLine("Building: "+job);
-            if (!job.Build())
-            {
-                job.SetState(State.Failed);
-                throw new BuildFailedException("Failed building " + job);
-            }
-            job.SetState(State.UpToDate);
-
-            _previousBuildsDatabase.SetInfoFor(job.Name, new PreviousBuildsDatabase.Entry() {TimeStamp = new NPath(job.Name).TimeStamp});
-        }
-
-        private bool DoPass(Node nodeToBuild)
-        {
-            if (nodeToBuild.GetState() == State.UpToDate)
-                return true;
-
-            if (nodeToBuild.GetState() == State.NotProcessed)
-            {
-                bool allUpToDate = true;
-                foreach (var dep in nodeToBuild.Dependencies)
-                {
-                    var upToDate = DoPass(dep);
-                    if (!upToDate)
-                        allUpToDate = false;
-                }
-                if (allUpToDate)
-                    nodeToBuild.SetState(State.DependenciesReady);
-                else
-                    return false;
-            }
-
-            if (nodeToBuild.GetState() == State.DependenciesReady)
-            {
-                var needToBuild = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
-                if (!needToBuild)
-                {
-                    nodeToBuild.SetState(State.UpToDate);
-                    return true;
-                }
-                nodeToBuild.SetState(State.Building);
-                QueueJob(nodeToBuild);
-                return false;
-            }
-
-            throw new NotSupportedException();
-        }
-
-        private void QueueJob(Node nodeToBuild)
-        {
-            m_Jobs.Enqueue(nodeToBuild);
         }
     }
 

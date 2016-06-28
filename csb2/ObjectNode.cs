@@ -1,36 +1,19 @@
 ﻿using System.Collections.Generic;
 using System.Text;
+using NiceIO;
 using Unity.IL2CPP;
 using Unity.IL2CPP.Building;
 using Unity.IL2CPP.Building.ToolChains.MsvcVersions;
 
 namespace csb2
 {
-    public class ObjectNode : Node
+    public class ObjectNode : GeneratedFileNode
     {
-        private readonly FileNode _cppFile;
-        private readonly string _objectFile;
+        private readonly SourceFileNode _cppFile;
 
-        public ObjectNode(FileNode cppFile, string objectFile) : base(objectFile)
+        public ObjectNode(SourceFileNode cppFile, NPath objectFile) : base(objectFile)
         {
             _cppFile = cppFile;
-            _objectFile = objectFile;
-        }
-
-        public override bool DetermineNeedToBuild(PreviousBuildsDatabase db)
-        {
-            PreviousBuildsDatabase.Entry e = null;
-            db.TryGetInfoFor(Name, out e);
-            if (e == null)
-                return true;
-
-            foreach (var dep in Dependencies)
-            {
-                if (dep.TimeStamp > e.TimeStamp)
-                    return true;
-            }
-
-            return false;
         }
 
         public override IEnumerable<Node> Dependencies
@@ -38,7 +21,7 @@ namespace csb2
             get { yield return _cppFile; }
         }
 
-        public override bool Build()
+        protected override bool BuildGeneratedFile()
         {
             var includeArguments = new StringBuilder();
             foreach (var includeDir in MsvcInstallation.GetLatestInstalled().GetIncludeDirectories())
@@ -46,12 +29,44 @@ namespace csb2
             
             var args = new Shell.ExecuteArgs
             {
-                Arguments = includeArguments+ _cppFile.File.ToString() + " /Fo:" + _objectFile + " -c",
-                Executable = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "link.exe").ToString()
+                Arguments = includeArguments+ _cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c",
+                Executable = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "cl.exe").ToString()
             };
 
             Shell.ExecuteAndCaptureOutput(args);
             return true;
         }
+    }
+
+    public class UpdateReason
+    {
+        private readonly string _message;
+
+        public UpdateReason(string message)
+        {
+            _message = message;
+        }
+
+        public override string ToString()
+        {
+            return _message;
+        }
+    }
+
+    class AliasNode : Node
+    {
+        private readonly Node[] _dependencies;
+
+        public AliasNode(string name, Node[] dependencies) : base(name)
+        {
+            _dependencies = dependencies;
+        }
+
+        public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
+        {
+            return null;
+        }
+
+        public override IEnumerable<Node> Dependencies => _dependencies;
     }
 }
