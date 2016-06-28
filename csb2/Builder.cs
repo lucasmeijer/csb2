@@ -5,52 +5,6 @@ using NiceIO;
 
 namespace csb2
 {
-    public abstract class Node
-    {
-        public string Name { get; }
-        public DateTime TimeStamp { get; protected set; }
-        private State m_State;
-        public virtual IEnumerable<Node> Dependencies { get{ yield break;}}
-
-        protected Node(string name)
-        {
-            Name = name;
-        }
-
-        public State GetState()
-        {
-            return m_State;
-        }
-
-        public void SetState(State state)
-        {
-            m_State = state;
-        }
-
-        public abstract bool DetermineNeedToBuild(PreviousBuildsDatabase db);
-
-
-        public virtual bool Build()
-        {
-            return true;
-        }
-
-        public override string ToString()
-        {
-            return Name;
-        }
-    }
-
-    class NodeGraph
-    {
-        private List<Node> _nodes = new List<Node>();
-
-        public void AddNode(Node n)
-        {
-            _nodes.Add(n);
-        }
-    }
-
     class Builder
     {
         private readonly PreviousBuildsDatabase _previousBuildsDatabase;
@@ -78,7 +32,7 @@ namespace csb2
                 return;
             var job = m_Jobs.Dequeue();
 
-            System.Console.WriteLine("Building: "+job);
+            Console.WriteLine("Building: "+job);
             if (!job.Build())
             {
                 job.SetState(State.Failed);
@@ -129,21 +83,5 @@ namespace csb2
         {
             m_Jobs.Enqueue(nodeToBuild);
         }
-    }
-
-    internal class BuildFailedException : Exception
-    {
-        public BuildFailedException(string message) : base(message)
-        {
-        }
-    }
-
-    public enum State
-    {
-        NotProcessed,
-        UpToDate,
-        DependenciesReady,
-        Building,
-        Failed
     }
 }

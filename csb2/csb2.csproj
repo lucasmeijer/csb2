@@ -47,12 +47,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Architecture.cs" />
+    <Compile Include="ExeNode.cs" />
+    <Compile Include="FileNode.cs" />
     <Compile Include="Msvc10Installation.cs" />
     <Compile Include="Msvc12Installation.cs" />
     <Compile Include="Msvc14Installation.cs" />
     <Compile Include="MsvcInstallation.cs" />
     <Compile Include="NiceIO.cs" />
     <Compile Include="Node.cs" />
+    <Compile Include="ObjectNode.cs" />
     <Compile Include="PreviousBuildsDatabase.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
