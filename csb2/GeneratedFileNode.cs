@@ -24,6 +24,15 @@ namespace csb2
             if (file.TimeStamp > e.TimeStamp)
                 return new UpdateReason($"Previous build that we made had a timestamp of {e.TimeStamp}, but the generated file on disk has a timestamp of {file.TimeStamp}");
 
+            foreach (var fileDependency in e.OutOfGraphDependencies)
+            {
+                var n = new NPath(fileDependency.Name);
+                if (!n.FileExists())
+                    return new UpdateReason($"Previously built object depended on {fileDependency.Name} which no longer exists");
+                if (n.TimeStamp != fileDependency.TimeStamp)
+                    return new UpdateReason($"Previously built object depended on {fileDependency.Name}, which has a timestamp of {fileDependency.TimeStamp} when we built our potentially recyclable generated file. Currently {fileDependency.Name} has a timestamp of {n.TimeStamp} which is different");
+            }
+      
             foreach (var dep in AllDependencies)
             {
                 var fileDep = dep as FileNode;
@@ -39,9 +48,12 @@ namespace csb2
         {
             File.Parent.EnsureDirectoryExists();
 
-            return BuildGeneratedFile();
+            var entry = BuildGeneratedFile();
+
+            PreviousBuildsDatabase.Instance.SetInfoFor(entry);
+            return entry != null;
         }
 
-        protected abstract bool BuildGeneratedFile();
+        protected abstract PreviousBuildsDatabase.Entry BuildGeneratedFile();
     }
 }

@@ -153,10 +153,7 @@ HANDLE WINAPI GetStdHandle(
                 throw new BuildFailedException("Failed building " + job);
             }
             job.State = State.UpToDate;
-
-            var generatedFileNode = job as GeneratedFileNode;
-            if (generatedFileNode != null)
-                _previousBuildsDatabase.SetInfoFor(new PreviousBuildsDatabase.Entry() {Name = job.Name, TimeStamp = generatedFileNode.TimeStamp});
+            
         }
 
         private bool DoPass(Node nodeToBuild, out int remaininCost)

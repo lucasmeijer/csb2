@@ -25,7 +25,10 @@ namespace csb2
                         _entries.TryAdd(value.Name, value);
                 }
             }
+            Instance = this;
         }
+
+        public static PreviousBuildsDatabase Instance { get; private set; }
 
         public void Save()
         {
@@ -49,7 +52,19 @@ namespace csb2
             public string Name;
             [ProtoMember(2)]
             public DateTime TimeStamp;
+            [ProtoMember(3)]
+            public OutOfGraphDependency[] OutOfGraphDependencies;
         }
+
+        [ProtoContract]
+        public class OutOfGraphDependency
+        {
+            [ProtoMember(1)]
+            public string Name;
+            [ProtoMember(2)]
+            public DateTime TimeStamp;
+        }
+
 
         public bool TryGetInfoFor(string file, out Entry result)
         {

@@ -17,7 +17,7 @@ namespace csb2
             SetStaticDependencies(objectNodes);
         }
 
-        protected override bool BuildGeneratedFile()
+        protected override PreviousBuildsDatabase.Entry BuildGeneratedFile()
         {
             var libPaths = MsvcInstallation.GetLatestInstalled().GetLibDirectories(new x86Architecture()).InQuotes().Select(s => "/LIBPATH:" + s).SeperateWithSpace();
                 
@@ -28,7 +28,13 @@ namespace csb2
             };
 
             Shell.ExecuteAndCaptureOutput(args);
-            return true;
+
+            return new PreviousBuildsDatabase.Entry()
+            {
+                Name = Name,
+                TimeStamp = File.TimeStamp,
+                OutOfGraphDependencies = _objectNodes.Select(o => new PreviousBuildsDatabase.OutOfGraphDependency() {Name = o.File.ToString(), TimeStamp = o.File.TimeStamp}).ToArray()
+            };
         }
 
         public override string NodeTypeIdentifier => "Exe";
