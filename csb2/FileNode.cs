@@ -6,7 +6,8 @@ namespace csb2
     public abstract class FileNode : Node
     {
         public NPath File { get; }
-        public DateTime TimeStamp { get; protected set; }
+
+        public DateTime TimeStamp => File.TimeStamp;
 
         protected FileNode(NPath file) : base(file.ToString())
         {

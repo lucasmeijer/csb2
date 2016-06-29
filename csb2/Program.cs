@@ -1,4 +1,5 @@
-﻿using NiceIO;
+﻿using System.Collections.Generic;
+using NiceIO;
 
 namespace csb2
 {
@@ -6,30 +7,20 @@ namespace csb2
     {
         static void Main(string[] args)
         {
-            var graph = new NodeGraph();
 
-            /*
-            var fileNode = new SourceFileNode(new NPath("c:/test/test.cpp"));
-            var objectNode = new ObjectNode(fileNode, new NPath("c:/test/test.obj"));
+            var projects = new NPath("c:/test/projects");
 
-            var fileNode2 = new SourceFileNode(new NPath("c:/test/test - Copy.cpp"));
-            var objectNode2 = new ObjectNode(fileNode2, new NPath("c:/test/test - Copy.obj"));
-            */
-
-            var filesNode = new SourceFilesInDirectoryNode(new NPath("c:/test/"));
-            var objectsNode = new ObjectsNode(filesNode);
-
-            var exeNode = new ExeNode(new NPath("c:/test/program.exe"), objectsNode);
-
-            var aliasNode = new AliasNode("all", new[] {exeNode});
-            /*
-           graph.AddNode(fileNode);
-        graph.AddNode(objectNode);
-        graph.AddNode(exeNode);
-            graph.Add
-            */
+            var cppPrograms = new List<CppProgram>();
+            foreach (var dir in projects.Directories())
+            {
+                var cppProgram = new CppProgram(dir.FileName, new NPath($"c:/test/out/{dir.FileName}.exe"), dir);
+                cppPrograms.Add(cppProgram);
+            }
+            
 
             var db = new PreviousBuildsDatabase(new NPath("c:/test/database"));
+
+            var aliasNode = new AliasNode("all", cppPrograms.ToArray());
             var builder = new Builder(db);
             builder.Build(aliasNode);
             db.Save();

@@ -12,6 +12,10 @@ namespace csb2
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
             NPath file = File;
+
+            if (!file.FileExists())
+                return new UpdateReason("No previously built file exists");
+
             PreviousBuildsDatabase.Entry e = null;
             db.TryGetInfoFor(Name, out e);
             if (e == null)
@@ -27,17 +31,15 @@ namespace csb2
                 if (fileDep != null && fileDep.TimeStamp > e.TimeStamp)
                     return new UpdateReason($"Dependency {dep} has a timestamp ({fileDep.TimeStamp}) newer than the timestamp of the generated file we had previously built ({e.TimeStamp}");
             }
-
-            TimeStamp = file.TimeStamp;
+            
             return null;
         }
 
         public sealed override bool Build()
         {
-            var success = BuildGeneratedFile();
-            if (success)
-                TimeStamp = File.TimeStamp;
-            return success;
+            File.Parent.EnsureDirectoryExists();
+
+            return BuildGeneratedFile();
         }
 
         protected abstract bool BuildGeneratedFile();

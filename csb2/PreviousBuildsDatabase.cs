@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,7 +11,7 @@ namespace csb2
     public class PreviousBuildsDatabase
     {
         private readonly NPath _dbfile;
-        private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>();
+        private readonly ConcurrentDictionary<string, Entry> _entries = new ConcurrentDictionary<string, Entry>();
 
         public PreviousBuildsDatabase(NPath dbfile)
         {
@@ -19,8 +20,9 @@ namespace csb2
             {
                 using (var file = File.OpenRead(_dbfile.ToString()))
                 {
-                    var values = Serializer.Deserialize<EntryContainer>(file);
-                    _entries = values.entries.ToDictionary(e => e.Name, e => e);
+                    var values = Serializer.Deserialize<EntryContainer>(file).entries;
+                    foreach (var value in values)
+                        _entries.TryAdd(value.Name, value);
                 }
             }
         }

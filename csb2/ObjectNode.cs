@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using NiceIO;
 using Unity.IL2CPP;
@@ -7,20 +8,16 @@ using Unity.IL2CPP.Building.ToolChains.MsvcVersions;
 
 namespace csb2
 {
-    public class ObjectNode : GeneratedFileNode, IHaveObjectNodes
+    public class ObjectNode : GeneratedFileNode
     {
         private readonly FileNode _cppFile;
 
         public ObjectNode(FileNode cppFile, NPath objectFile) : base(objectFile)
         {
             _cppFile = cppFile;
+            SetStaticDependencies(_cppFile);
         }
-
-        public override IEnumerable<Node> StaticDependencies
-        {
-            get { yield return _cppFile; }
-        }
-
+        
         protected override bool BuildGeneratedFile()
         {
             var includeArguments = new StringBuilder();
@@ -38,6 +35,7 @@ namespace csb2
         }
 
         public ObjectNode[] ObjectNodes => new[] {this};
+        public override string NodeTypeIdentifier => "Obj";
     }
 
     public class UpdateReason
@@ -57,18 +55,16 @@ namespace csb2
 
     class AliasNode : Node
     {
-        private readonly Node[] _staticDependencies;
-
         public AliasNode(string name, Node[] staticDependencies) : base(name)
         {
-            _staticDependencies = staticDependencies;
+            SetStaticDependencies(staticDependencies);
         }
+
+        public override string NodeTypeIdentifier => "Alias";
 
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
             return null;
         }
-
-        public override IEnumerable<Node> StaticDependencies => _staticDependencies;
     }
 }

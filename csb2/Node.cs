@@ -10,10 +10,32 @@ namespace csb2
         public string Name { get; }
         public State State { get; set; }
         public UpdateReason UpdateReason { get; private set; }
-        public virtual IEnumerable<Node> StaticDependencies { get{ yield break;}}
-        public virtual IEnumerable<Node> DynamicDependencies {  get { yield break; } }
+        public virtual IEnumerable<Node> ProvideStaticDependencies() { yield break;}
+        private Node[] _dynamicDependencies;
+        private Node[] _staticDependencies;
+        public Node[] DynamicDependencies
+        {
+            get
+            {
+                if (State < State.StaticDependenciesReady)
+                    throw new InvalidOperationException();
 
-        public IEnumerable<Node> AllDependencies => StaticDependencies.Concat(DynamicDependencies);
+                return _dynamicDependencies ?? (_dynamicDependencies = ProvideDynamicDependencies().ToArray());
+            }
+        }
+
+        public Node[] StaticDependencies => _staticDependencies ?? (_staticDependencies = ProvideStaticDependencies().ToArray());
+
+        public void SetStaticDependencies(params Node[] deps)
+        {
+            if (_staticDependencies != null)
+                throw new InvalidOperationException();
+            _staticDependencies = deps;
+        }
+
+        public IEnumerable<Node> AllDependencies => _staticDependencies.Concat(_dynamicDependencies);
+        public abstract string NodeTypeIdentifier { get; }
+        public int EstimatedCost => 1;
 
         protected Node(string name)
         {
@@ -22,7 +44,8 @@ namespace csb2
 
         public virtual UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
-            return new UpdateReason($"Nodes of type {GetType()} always rebuild");
+            return null;
+//            return new UpdateReason($"Nodes of type {GetType()} always rebuild");
         }
 
         public virtual bool Build()
@@ -40,8 +63,9 @@ namespace csb2
             UpdateReason = updateReason;
         }
 
-        public virtual void SetupDynamicDependencies()
+        public virtual IEnumerable<Node> ProvideDynamicDependencies()
         {
+            yield break;
         }
     }
 

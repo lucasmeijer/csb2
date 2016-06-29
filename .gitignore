@@ -1,4 +1,6 @@
 csb2/bin
 csb2/obj
+csb2.Tests/bin
+csb2.Tests/obj
 packages
 .vs
