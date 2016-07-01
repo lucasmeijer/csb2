@@ -88,6 +88,7 @@
     <Compile Include="GeneratedFileNode.cs" />
     <Compile Include="GraphMaker.cs" />
     <Compile Include="Hashing.cs" />
+    <Compile Include="IncludeParser.cs" />
     <Compile Include="Palette.cs" />
     <Compile Include="SourceFileNode.cs" />
     <Compile Include="Msvc10Installation.cs" />

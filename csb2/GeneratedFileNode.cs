@@ -12,7 +12,7 @@ namespace csb2
         }
         
         public virtual bool SupportsNetworkCache => false;
-        public virtual string NetworkCacheKey { get { throw new NotSupportedException(); } }
+        public abstract string InputsHash { get; }
 
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
@@ -28,35 +28,10 @@ namespace csb2
 
             if (file.TimeStamp != e.TimeStamp)
                 return new UpdateReason($"Previous build that we made had a timestamp of {e.TimeStamp}, but the generated file on disk has a timestamp of {file.TimeStamp}");
-   
-            foreach (var fileDependency in e.OutOfGraphDependencies)
-            {
-                using (TinyProfiler.Section("SingleDep" + fileDependency.Name))
-                {
-                    var n = new NPath(fileDependency.Name);
-                    if (!n.FileExists())
-                        return new UpdateReason($"Previously built object depended on {fileDependency.Name} which no longer exists");
-                    if (n.TimeStamp != fileDependency.TimeStamp)
-                        return
-                            new UpdateReason(
-                                $"Previously built object depended on {fileDependency.Name}, which has a timestamp of {fileDependency.TimeStamp} when we built our potentially recyclable generated file. Currently {fileDependency.Name} has a timestamp of {n.TimeStamp} which is different");
-                }
-            }
-
-            if (SupportsNetworkCache)
-            {
-                if (e.CacheKey != NetworkCacheKey)
-                    return new UpdateReason("CacheKey of potentially recyclable object is different from current one");
-            }
-
-            foreach (var dep in AllDependencies)
-            {
-                var fileDep = dep as FileNode;
-
-                if (fileDep != null && fileDep.TimeStamp > e.TimeStamp)
-                    return new UpdateReason($"Dependency {dep} has a timestamp ({fileDep.TimeStamp}) newer than the timestamp of the generated file we had previously built ({e.TimeStamp}");
-            }
-
+  
+            if (e.InputsHash != InputsHash)
+                return new UpdateReason("CacheKey of potentially recyclable object is different from current one");
+  
             return null;
         }
 
@@ -69,9 +44,7 @@ namespace csb2
             PreviousBuildsDatabase.Instance.SetInfoFor(entry);
 
             if (SupportsNetworkCache)
-            {
-                CachingClient.Store(NetworkCacheKey, File);
-            }
+                CachingClient.Store(InputsHash, File);
 
             return entry != null;
         }
@@ -79,7 +52,6 @@ namespace csb2
 
         public void ResolvedFromCache()
         {
-
             var entry = EntryForResultFromCache();
 
             PreviousBuildsDatabase.Instance.SetInfoFor(entry);

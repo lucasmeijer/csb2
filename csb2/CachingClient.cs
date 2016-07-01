@@ -75,7 +75,7 @@ namespace csb2
         {
             using (TinyProfiler.Section("CacheClient " + job.Name))
             {
-                var cacheKey = job.NetworkCacheKey;
+                var cacheKey = job.InputsHash;
                 var client = new JsonServiceClient(CachingServer.Url);
 
                 CacheResponse result = new CacheResponse() {Files = new List<FilePayLoad>()};
@@ -135,7 +135,7 @@ namespace csb2
             var bytes = file.ReadAllBytes();
             Task.Run(() =>
             {
-                var cacheStore = new CacheStore() {Key = networkCacheKey, Files = new List<FilePayLoad>() {new FilePayLoad() {Name = file.FileName, Content = bytes}}};
+                var cacheStore = new CacheStore() {Key = networkCacheKey, Name = file.FileName, Files = new List<FilePayLoad>() {new FilePayLoad() {Name = file.FileName, Content = bytes}}};
                 new JsonServiceClient(CachingServer.Url).Post(cacheStore);
             });
         }

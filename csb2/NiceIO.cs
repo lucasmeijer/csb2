@@ -6,7 +6,7 @@ using System.Text;
 
 namespace NiceIO
 {
-	public class NPath
+	public class NPath : IEquatable<NPath>
 	{
         private static readonly StringComparison PathStringComparison = IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
@@ -240,31 +240,35 @@ namespace NiceIO
 
 		public override bool Equals(Object obj)
 		{
-			if (obj == null)
+		    if (obj == null)
 				return false;
 
-			// If parameter cannot be cast to Point return false.
-			var p = obj as NPath;
-			if ((Object)p == null)
-				return false;
+            var p = obj as NPath;
+            if ((Object)p == null)
+                return false;
 
-			if (p._isRelative != _isRelative)
-				return false;
-
-		    if (!string.Equals(p._driveLetter, _driveLetter, PathStringComparison))
-		        return false;
-
-			if (p._elements.Length != _elements.Length)
-				return false;
-
-			for (var i = 0; i != _elements.Length; i++)
-                if (!string.Equals(p._elements[i], _elements[i], PathStringComparison))
-					return false;
-
-			return true;
+            return Equals(p);
 		}
 
-		public static bool operator ==(NPath a, NPath b)
+	    public bool Equals(NPath p)
+	    {
+	        if (p._isRelative != _isRelative)
+	            return false;
+
+	        if (!string.Equals(p._driveLetter, _driveLetter, PathStringComparison))
+	            return false;
+
+	        if (p._elements.Length != _elements.Length)
+	            return false;
+
+	        for (var i = 0; i != _elements.Length; i++)
+	            if (!string.Equals(p._elements[i], _elements[i], PathStringComparison))
+	                return false;
+
+	        return true;
+	    }
+
+	    public static bool operator ==(NPath a, NPath b)
 		{
 			// If both are null, or both are same instance, return true.
 			if (ReferenceEquals(a, b))
@@ -285,8 +289,10 @@ namespace NiceIO
 				int hash = 17;
 				// Suitable nullity checks etc, of course :)
 				hash = hash * 23 + _isRelative.GetHashCode();
-				hash = hash * 23 + _elements.GetHashCode();
-				if (_driveLetter != null)
+				
+                foreach (var element in _elements)
+                    hash = hash * 23 + element.GetHashCode();
+                if (_driveLetter != null)
 					hash = hash * 23 + _driveLetter.GetHashCode();
 				return hash;
 			}

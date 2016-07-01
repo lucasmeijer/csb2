@@ -38,9 +38,8 @@ namespace csb2
             return new PreviousBuildsDatabase.Entry()
             {
                 Name = Name,
+                InputsHash= InputsHash,
                 TimeStamp = File.TimeStamp,
-                OutOfGraphDependencies = _objectNodes.Select(o => new PreviousBuildsDatabase.OutOfGraphDependency() {Name = o.File.ToString(), TimeStamp = o.File.TimeStamp}).ToArray(),
-                CacheKey = NetworkCacheKey
             };
         }
 
@@ -52,14 +51,20 @@ namespace csb2
             return MakeDBEntry();
         }
 
-        public override string NetworkCacheKey
+        public override string InputsHash
         {
             get
             {
                 var sb = new StringBuilder(File.FileName);
                 foreach (var o in _objectNodes)
-                    sb.Append(Hashing.CalculateHash(o.File));
-                return Hashing.CalculateHash(sb.ToString()).ToString();
+                {
+                    if (o.File.ToString().Contains("Project4"))
+                        System.GC.Collect();
+                    if (o.File.ToString() == @"c:\test\artifacts\Project4\File4.obj")
+                        System.GC.Collect();
+                    sb.Append(FileHashProvider.Instance.HashFor(o.File));
+                }
+                return Hashing.CalculateHash(sb.ToString());
             }
         }
 

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Policy;
@@ -17,59 +18,61 @@ namespace csb2
     public class ObjectNode : GeneratedFileNode
     {
         private readonly FileNode _cppFile;
+        private readonly NPath[] _includeDirs;
         private string _codeGenArguments = "-O2";
 
-        public ObjectNode(FileNode cppFile, NPath objectFile) : base(objectFile)
+        public ObjectNode(FileNode cppFile, NPath objectFile, NPath[] includeDirs) : base(objectFile)
         {
             _cppFile = cppFile;
+            _includeDirs = includeDirs;
             SetStaticDependencies(_cppFile);
         }
         
         protected override PreviousBuildsDatabase.Entry BuildGeneratedFile()
         {
             var includeArguments = new StringBuilder();
-            foreach (var includeDir in MsvcInstallation.GetLatestInstalled().GetIncludeDirectories())
+
+            foreach (var includeDir in AllIncludeDirectories)
                 includeArguments.Append("-I" + includeDir.InQuotes() + " ");
             
             var tmp = NPath.SystemTemp.Combine("csb2").EnsureDirectoryExists().Combine(Hashing.CalculateHash(_cppFile.File.ToString()).ToString()).ChangeExtension("cpp");
             var cl = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "cl.exe").ToString();
 
+            /*
             var preprocessorargs = new Shell.ExecuteArgs {Arguments = includeArguments + _cppFile.File.InQuotes() + "  /P /Fi:" + tmp, Executable = cl};
-
+            
             using (TinyProfiler.Section("PreProcessor " + _cppFile.File))
                 Shell.ExecuteAndCaptureOutput(preprocessorargs);
+                */
 
-            var task = Task.Run(() => FindIncludedFilesInPreprocessorOutput(tmp));
 
-            var args = new Shell.ExecuteArgs {Arguments = tmp.InQuotes() + _codeGenArguments+ " /Fo:" + File.InQuotes() + " -c", Executable = cl};
-
-            using (TinyProfiler.Section("Compile " + _cppFile.File))
-                Shell.ExecuteAndCaptureOutput(args);
-            /*
-
-      var fullArgs = new Shell.ExecuteArgs { Arguments = includeArguments + _cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c", Executable = cl };
+      var fullArgs = new Shell.ExecuteArgs { Arguments = includeArguments + " " + _codeGenArguments + " "+_cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c", Executable = cl };
 
       using (TinyProfiler.Section("CompileFull " + _cppFile.File))
           Shell.ExecuteAndCaptureOutput(fullArgs);
       var showIncludes = new Shell.ExecuteArgs { Arguments = includeArguments + _cppFile.File.InQuotes() + " /showIncludes -c", Executable = cl };
+            
 
-      using (TinyProfiler.Section("showIncludes " + _cppFile.File))
-          Shell.ExecuteAndCaptureOutput(showIncludes);
+            
 
-*/
-
-            using (TinyProfiler.Section("WaitForIncludes " + _cppFile.File))
-                task.Wait();
-            var result = task.Result;
-
-            tmp.Delete();
-            return new PreviousBuildsDatabase.Entry() {Name = Name, OutOfGraphDependencies = result.Select(r=>new PreviousBuildsDatabase.OutOfGraphDependency() {Name = r, TimeStamp = new NPath(r).TimeStamp}).ToArray(), TimeStamp = File.TimeStamp, CacheKey = InputsHash};
+            return new PreviousBuildsDatabase.Entry() {Name = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash};
 
         }
 
+        private IEnumerable<NPath> AllIncludeDirectories => _includeDirs.Concat(ToolChainIncludeDirectories);
+
+        private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetLatestInstalled().GetIncludeDirectories();
+
         protected override PreviousBuildsDatabase.Entry EntryForResultFromCache()
         {
-            return new PreviousBuildsDatabase.Entry() { Name = Name, OutOfGraphDependencies = new PreviousBuildsDatabase.OutOfGraphDependency[0], TimeStamp = File.TimeStamp, CacheKey = InputsHash };
+            return new PreviousBuildsDatabase.Entry() { Name = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash };
+        }
+
+        IEnumerable<NPath> FindIncludedFiles(NPath file, HashSet<NPath> alreadyProcessed = null )
+        {
+            if (alreadyProcessed == null)
+                alreadyProcessed = new HashSet<NPath>();
+            foreach (var nPath in _parser.FindIncludedFiles(file, _includeDirs, ToolChainIncludeDirectories, alreadyProcessed)) yield return nPath;
         }
 
         string[] FindIncludedFilesInPreprocessorOutput(NPath preprocessorOutput)
@@ -94,7 +97,36 @@ namespace csb2
 
         public override bool SupportsNetworkCache => true;
 
-        public override string InputsHash => Hashing.CalculateHash(Hashing.CalculateHash(_cppFile.File) + _codeGenArguments).ToString();
+        private string _inputsHash = null;
+        private static IncludeParser _parser = new IncludeParser();
+
+        public override string InputsHash
+        {
+            get
+            {
+                if (_inputsHash != null)
+                    return _inputsHash;
+
+                _inputsHash = CalculateInputsHash();
+                return _inputsHash;
+            }
+        }
+
+        private string CalculateInputsHash()
+        {
+            using (TinyProfiler.Section("CalculateInputsHash "+_cppFile.File))
+            {
+                var includeFiles = FindIncludedFiles(_cppFile.File);
+                var sb = new StringBuilder(FileHashProvider.Instance.HashFor(_cppFile.File));
+
+                foreach (var includeFile in includeFiles)
+                {
+                    sb.Append(includeFile.FileName);
+                    sb.Append(FileHashProvider.Instance.HashFor(includeFile));
+                }
+                return Hashing.CalculateHash(sb.ToString());
+            }
+        }
 
         public ObjectNode[] ObjectNodes => new[] {this};
         public override string NodeTypeIdentifier => "Obj";

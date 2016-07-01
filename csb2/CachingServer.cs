@@ -75,7 +75,14 @@ namespace csb2.Caching
             {
                 using (TinyProfiler.Section("CacheServerStore " + storeRequest.Name))
                 {
-                    var cacheEntryDir = _cachePath.Combine(storeRequest.Key).EnsureDirectoryExists();
+                    var cacheEntryDir = _cachePath.Combine(storeRequest.Key);
+                    if (cacheEntryDir.Exists())
+                    {
+                        Console.WriteLine("Getting a store request that we already have. very fishy! "+storeRequest.Name);
+                        return null;
+                    }
+
+                    cacheEntryDir.EnsureDirectoryExists();
 
                     foreach (var file in storeRequest.Files)
                         cacheEntryDir.Combine(file.Name).WriteAllBytes(file.Content);

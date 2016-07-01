@@ -53,20 +53,8 @@ namespace csb2
             [ProtoMember(2)]
             public DateTime TimeStamp;
             [ProtoMember(3)]
-            public OutOfGraphDependency[] OutOfGraphDependencies = new OutOfGraphDependency[0];
-            [ProtoMember(4)]
-            public string CacheKey = "";
+            public string InputsHash;
         }
-
-        [ProtoContract]
-        public class OutOfGraphDependency
-        {
-            [ProtoMember(1)]
-            public string Name;
-            [ProtoMember(2)]
-            public DateTime TimeStamp;
-        }
-
 
         public bool TryGetInfoFor(string file, out Entry result)
         {

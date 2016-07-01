@@ -15,6 +15,7 @@ namespace csb2
         private readonly PreviousBuildsDatabase _previousBuildsDatabase;
         private readonly Queue<Node> m_Jobs = new Queue<Node>();
         
+        public FileHashProvider FileHashProvider { get; } = new FileHashProvider(new NPath("c:/test/hashdatabase"));
 
         private int _totalEstimatedCost = 1;
         private int _remainingEstimatedCost = 0;

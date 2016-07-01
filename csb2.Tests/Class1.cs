@@ -36,6 +36,7 @@ namespace csb2.Tests
 #include <vector>
 #include <set>
 
+//{dir+i.ToString()}
 void SomeFunction{i}()
 {{
   printf(""hello there sailor {i}\n"");
@@ -49,8 +50,6 @@ int main()
     return 0;
 }
 ";
-
-
                 dir.Combine($"File{i}.cpp").WriteAllText(contents);
             }
         }
