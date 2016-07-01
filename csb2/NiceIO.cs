@@ -628,7 +628,22 @@ namespace NiceIO
 			return this;
 		}
 
-		public string ReadAllText()
+        public NPath WriteAllBytes(byte[] contents)
+        {
+            ThrowIfRelative();
+            EnsureParentDirectoryExists();
+            File.WriteAllBytes(ToString(), contents);
+            return this;
+        }
+
+        public byte[] ReadAllBytes()
+        {
+            ThrowIfRelative();
+            EnsureParentDirectoryExists();
+            return File.ReadAllBytes(ToString());
+        }
+
+        public string ReadAllText()
 		{
 			ThrowIfRelative();
 			return File.ReadAllText(ToString());

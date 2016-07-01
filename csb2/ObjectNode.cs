@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Security.Policy;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -11,6 +12,7 @@ using NiceIO;
 using Unity.IL2CPP;
 using Unity.IL2CPP.Building;
 using Unity.IL2CPP.Building.ToolChains.MsvcVersions;
+using Unity.TinyProfiling;
 
 namespace csb2
 {
@@ -35,19 +37,33 @@ namespace csb2
 
             var preprocessorargs = new Shell.ExecuteArgs {Arguments = includeArguments + _cppFile.File.InQuotes() + "  /P /Fi:" + tmp, Executable = cl};
 
-            Shell.ExecuteAndCaptureOutput(preprocessorargs);
+            using (TinyProfiler.Section("PreProcessor " + _cppFile.File))
+                Shell.ExecuteAndCaptureOutput(preprocessorargs);
 
             var task = Task.Run(() => FindIncludedFilesInPreprocessorOutput(tmp));
 
             var args = new Shell.ExecuteArgs {Arguments = tmp.InQuotes() + " /Fo:" + File.InQuotes() + " -c", Executable = cl};
 
-            Shell.ExecuteAndCaptureOutput(args);
+            using (TinyProfiler.Section("Compile " + _cppFile.File))
+                Shell.ExecuteAndCaptureOutput(args);
+            /*
 
-            task.Wait();
+      var fullArgs = new Shell.ExecuteArgs { Arguments = includeArguments + _cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c", Executable = cl };
+
+      using (TinyProfiler.Section("CompileFull " + _cppFile.File))
+          Shell.ExecuteAndCaptureOutput(fullArgs);
+      var showIncludes = new Shell.ExecuteArgs { Arguments = includeArguments + _cppFile.File.InQuotes() + " /showIncludes -c", Executable = cl };
+
+      using (TinyProfiler.Section("showIncludes " + _cppFile.File))
+          Shell.ExecuteAndCaptureOutput(showIncludes);
+
+*/
+
+            using (TinyProfiler.Section("WaitForIncludes " + _cppFile.File))
+                task.Wait();
             var result = task.Result;
 
             tmp.Delete();
-
             return new PreviousBuildsDatabase.Entry() {Name = Name, OutOfGraphDependencies = result.Select(r=>new PreviousBuildsDatabase.OutOfGraphDependency() {Name = r, TimeStamp = new NPath(r).TimeStamp}).ToArray(), TimeStamp = File.TimeStamp};
 
         }
@@ -62,11 +78,19 @@ namespace csb2
                 var result = new SortedSet<string>();
 
                 foreach (Match match in matches)
-                    result.Add(match.Groups["file"].Value);
+                {
+                    var value = match.Groups["file"].Value;
+                    if (!value.Contains("Microsoft Visual Studio") && !value.Contains("Windows Kits"))
+                        result.Add(value);
+                }
                 return result.ToArray();
             }
         }
 
+
+        public override bool SupportsNetworkCache => true;
+
+        public override string NetworkCacheKey => GetChecksum(_cppFile.File);
 
         public ObjectNode[] ObjectNodes => new[] {this};
         public override string NodeTypeIdentifier => "Obj";
@@ -80,6 +104,16 @@ namespace csb2
                 hashedValue *= 3074457345618258799ul;
             }
             return hashedValue;
+        }
+
+        private static string GetChecksum(NPath file)
+        {
+            using (FileStream stream = System.IO.File.OpenRead(file.ToString()))
+            {
+                var sha = new SHA256Managed();
+                byte[] checksum = sha.ComputeHash(stream);
+                return BitConverter.ToString(checksum).Replace("-", String.Empty);
+            }
         }
     }
 

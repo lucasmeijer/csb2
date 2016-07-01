@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using NiceIO;
+using Unity.TinyProfiling;
 
 namespace csb2
 {
@@ -14,9 +14,22 @@ namespace csb2
     {
         private readonly PreviousBuildsDatabase _previousBuildsDatabase;
         private readonly Queue<Node> m_Jobs = new Queue<Node>();
+        
 
         private int _totalEstimatedCost = 1;
         private int _remainingEstimatedCost = 0;
+
+
+        public readonly AutoResetEvent _mainThreadEvent = new AutoResetEvent(false);
+        readonly AutoResetEvent _workedThreadsEvent = new AutoResetEvent(false);
+
+
+        public bool _workerThreadsShouldExit = false;
+        private readonly object _jobsMutex = new object();
+
+        private readonly object _consoleLock = new object();
+        private CachingClient _cachingClient;
+
 
         public Builder(PreviousBuildsDatabase previousBuildsDatabase)
         {
@@ -29,120 +42,107 @@ namespace csb2
             stopWatch.Start();
 
             var workedThreads = new List<Thread>();
-            for (int i=0; i!=15;i++)
+            for (int i=0; i!=5;i++)
             {
                 var thread = new Thread(WorkerThread);
                 thread.Start(i);
                 thread.Name = "WorkedThread" + i;
                 workedThreads.Add(thread);
             }
+           
+            _cachingClient = new CachingClient(this);
 
             while (true)
             {
                 int costRemaining;
-                if (DoPass(nodeToBuild, out costRemaining))
+                bool doPass;
+                int i = 0;
+                using (TinyProfiler.Section("DoPass"+i))
+                    doPass = DoPass(nodeToBuild, out costRemaining);
+                if (doPass)
                 {
+                    i++;
                     _workerThreadsShouldExit = true;
-                    
+
+                    Console.WriteLine();
                     Console.WriteLine($"CSB: Build Finished");
                     var elapsed = stopWatch.Elapsed;
                     Console.WriteLine($"Time: {elapsed.Minutes}m{elapsed.Seconds}.{elapsed.Milliseconds}s");
 
-                    foreach (var thread in workedThreads)
-                        thread.Join();
+                    using (TinyProfiler.Section("Waiting For WorkerThread Shutdown"))
+                        foreach (var thread in workedThreads)
+                             thread.Join();
                     return;
                 }
                 _remainingEstimatedCost = costRemaining;
-                _mainThreadEvent.WaitOne(1000);
+                using (TinyProfiler.Section("Waiting for completion of a job"))
+                    _mainThreadEvent.WaitOne(1000);
             }
         }
-
-        private void PumpJobs()
-        {
-            if (!m_Jobs.Any())
-                return;
-            var job = m_Jobs.Dequeue();
-            
-        }
-
-        /*
-        BOOL WINAPI WriteFile(
-  _In_        HANDLE       hFile,
-  _In_        LPCVOID      lpBuffer,
-  _In_        DWORD        nNumberOfBytesToWrite,
-  _Out_opt_   LPDWORD      lpNumberOfBytesWritten,
-  _Inout_opt_ LPOVERLAPPED lpOverlapped
-);
-
-            
-HANDLE WINAPI GetStdHandle(
-  _In_ DWORD nStdHandle
-);
-*/
-        [DllImport("Kernel32.dll")]
-        static extern bool WriteFile(IntPtr handle, byte[] buffer, int bytestowrite, out uint byteswritten, IntPtr overlapped);
-
-        [DllImport("Kernel32.dll")]
-        static extern IntPtr GetStdHandle(int handle);
         
-        readonly AutoResetEvent _mainThreadEvent = new AutoResetEvent(false);
-        readonly AutoResetEvent _workedThreadsEvent = new AutoResetEvent(false);
-        private bool _workerThreadsShouldExit = false;
-        private readonly Mutex _jobsMutex = new Mutex();
-        private readonly object _consoleLock = new object();
         void WorkerThread(object indexObject)
         {
             int workedThreadIndex = (int) indexObject;
             while (true)
             {
-                _workedThreadsEvent.WaitOne(200);
+                using (TinyProfiler.Section("Waiting for task"))
+                    _workedThreadsEvent.WaitOne(200);
+
                 if (_workerThreadsShouldExit)
                     return;
-                
-                Node job = null;
-                _jobsMutex.WaitOne();
-                if (m_Jobs.Count > 0)
-                    job = m_Jobs.Dequeue();
-                _jobsMutex.ReleaseMutex();
-                if (job == null)
-                    continue;
-                BuildNode(job);
 
-              //  Console.WriteLine("OutType: "+Console.Out.GetType().FullName);
-              
-
-                lock (_consoleLock)
+                while (true)
                 {
-                    Console.Write("\r                                                           \r");
-                 
-                    var nodeIdentifier = $" [{job.NodeTypeIdentifier}]".PadRight(9);
-                    var workedThreadIdentifier = $"{workedThreadIndex.ToString().PadLeft(2)}>";
-                    Console.Write(workedThreadIdentifier);
-
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.Write(nodeIdentifier);
-                    Console.ResetColor();
-                    Console.WriteLine(job.Name);
-                    //flush
-                    var percentage = 100 - (int) (100.0f*_remainingEstimatedCost/_totalEstimatedCost);
-
-                    var bar = new StringBuilder();
-                    int maxBarLength = 10;
-                    for (int i = 0; i != maxBarLength; i++)
+                    Node job = null;
+                    lock (_jobsMutex)
                     {
-                        if (100*((float) i/maxBarLength) < percentage)
-                            bar.Append("*");
-                        else
-                            bar.Append("-");
+                        if (m_Jobs.Count == 0)
+                            break;
+
+                        job = m_Jobs.Dequeue();
                     }
 
-                    Console.Write($"\r[{bar}] {percentage}%");
+                    using (TinyProfiler.Section("Build: " + job.Name))
+                        BuildNode(job);
                     
-                    //Console.Out.Flush();
+                    LogBuild(job, "Local" + workedThreadIndex);
+
+                    _mainThreadEvent.Set();
+                }
+            }    
+        }
+
+        public void LogBuild(Node job, string workerIdentifier)
+        {
+            lock (_consoleLock)
+            {
+                Console.Write("\r                                                           \r");
+
+                var nodeIdentifier = $" [{job.NodeTypeIdentifier}]".PadRight(9);
+                var paddedWorkerIdentifier = $"{workerIdentifier.PadRight(7)}>";
+                Console.Write(paddedWorkerIdentifier);
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write(nodeIdentifier);
+                Console.ResetColor();
+                Console.WriteLine(job.Name);
+                //flush
+                var percentage = 100 - (int) (100.0f*_remainingEstimatedCost/_totalEstimatedCost);
+
+                var bar = new StringBuilder();
+                int maxBarLength = 10;
+                for (int i = 0; i != maxBarLength; i++)
+                {
+                    if (100*((float) i/maxBarLength) < percentage)
+                        bar.Append("*");
+                    else
+                        bar.Append("-");
                 }
 
-                _mainThreadEvent.Set();
-            }    
+                Console.Write($"\r[{bar}] {percentage}%");
+
+                //Console.Out.Flush();
+            }
         }
 
         private void BuildNode(Node job)
@@ -171,10 +171,13 @@ HANDLE WINAPI GetStdHandle(
             if (nodeToBuild.State == State.NotProcessed)
             {
                 int costOfRemainingDependencies = 0;
-                if (!RecurseIntoDependencies(nodeToBuild.StaticDependencies, out costOfRemainingDependencies))
+                //using (TinyProfiler.Section("RecurseIntoStaticDeps: " + nodeToBuild.Name))
                 {
-                    remaininCost += costOfRemainingDependencies;
-                    return false;
+                    if (!RecurseIntoDependencies(nodeToBuild.StaticDependencies, out costOfRemainingDependencies))
+                    {
+                        remaininCost += costOfRemainingDependencies;
+                        return false;
+                    }
                 }
                 nodeToBuild.State = State.StaticDependenciesReady;
             }
@@ -192,7 +195,9 @@ HANDLE WINAPI GetStdHandle(
             
             if (nodeToBuild.State == State.AllDependenciesReady)
             {
-                var updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
+                UpdateReason updateReason;
+                using (TinyProfiler.Section("DetermineNeedToBuild: " + nodeToBuild.Name))
+                    updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
                 if (updateReason == null)
                 {
                     //Console.WriteLine("Already UpToDate: "+nodeToBuild);
@@ -216,7 +221,9 @@ HANDLE WINAPI GetStdHandle(
             foreach (var dep in dependencies)
             {
                 int cost;
-                var upToDate = DoPass(dep, out cost);
+                bool upToDate;
+                //using (TinyProfiler.Section("DoPass "+dep.Name))
+                    upToDate = DoPass(dep, out cost);
                 costOfRemainingDependencies += cost;
                 if (!upToDate)
                     allUpToDate = false;
@@ -226,9 +233,21 @@ HANDLE WINAPI GetStdHandle(
 
         private void QueueJob(Node nodeToBuild)
         {
-            _jobsMutex.WaitOne();
-            m_Jobs.Enqueue(nodeToBuild);
-            _jobsMutex.ReleaseMutex();
+            var generatedFileNode = nodeToBuild as GeneratedFileNode;
+            if (_cachingClient.Enabled && generatedFileNode != null && generatedFileNode.SupportsNetworkCache)
+            {
+                _cachingClient.Queue(generatedFileNode);
+            }
+            else
+            {
+                QueueJobNoCaching(nodeToBuild);
+            }
+        }
+
+        public void QueueJobNoCaching(Node nodeToBuild)
+        {
+            lock (_jobsMutex)
+                m_Jobs.Enqueue(nodeToBuild);
             _workedThreadsEvent.Set();
         }
     }

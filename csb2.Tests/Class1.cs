@@ -19,7 +19,7 @@ namespace csb2.Tests
             dir.Delete();
             dir.EnsureDirectoryExists();
 
-            for (int i = 0; i != 30; i++)
+            for (int i = 0; i != 5; i++)
             {
                 MakeProject(dir.Combine("Project"+i), 30);    
             }
@@ -32,6 +32,9 @@ namespace csb2.Tests
             {
                 var contents = $@"
 #include ""stdio.h""
+#include <string>
+#include <vector>
+#include <set>
 
 void SomeFunction{i}()
 {{
