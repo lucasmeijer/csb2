@@ -43,6 +43,12 @@ namespace csb2
                 }
             }
 
+            if (SupportsNetworkCache)
+            {
+                if (e.CacheKey != NetworkCacheKey)
+                    return new UpdateReason("CacheKey of potentially recyclable object is different from current one");
+            }
+
             foreach (var dep in AllDependencies)
             {
                 var fileDep = dep as FileNode;
@@ -70,6 +76,21 @@ namespace csb2
             return entry != null;
         }
 
+
+        public void ResolvedFromCache()
+        {
+
+            var entry = EntryForResultFromCache();
+
+            PreviousBuildsDatabase.Instance.SetInfoFor(entry);
+        }
+
+        protected virtual PreviousBuildsDatabase.Entry EntryForResultFromCache()
+        {
+            throw new InvalidOperationException();
+        }
+
         protected abstract PreviousBuildsDatabase.Entry BuildGeneratedFile();
+
     }
 }

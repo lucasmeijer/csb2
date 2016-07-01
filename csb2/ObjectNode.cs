@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Security.Policy;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -19,6 +17,7 @@ namespace csb2
     public class ObjectNode : GeneratedFileNode
     {
         private readonly FileNode _cppFile;
+        private string _codeGenArguments = "-O2";
 
         public ObjectNode(FileNode cppFile, NPath objectFile) : base(objectFile)
         {
@@ -32,7 +31,7 @@ namespace csb2
             foreach (var includeDir in MsvcInstallation.GetLatestInstalled().GetIncludeDirectories())
                 includeArguments.Append("-I" + includeDir.InQuotes() + " ");
             
-            var tmp = NPath.SystemTemp.Combine("csb2").EnsureDirectoryExists().Combine(CalculateHash(_cppFile.File.ToString()).ToString()).ChangeExtension("cpp");
+            var tmp = NPath.SystemTemp.Combine("csb2").EnsureDirectoryExists().Combine(Hashing.CalculateHash(_cppFile.File.ToString()).ToString()).ChangeExtension("cpp");
             var cl = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "cl.exe").ToString();
 
             var preprocessorargs = new Shell.ExecuteArgs {Arguments = includeArguments + _cppFile.File.InQuotes() + "  /P /Fi:" + tmp, Executable = cl};
@@ -42,7 +41,7 @@ namespace csb2
 
             var task = Task.Run(() => FindIncludedFilesInPreprocessorOutput(tmp));
 
-            var args = new Shell.ExecuteArgs {Arguments = tmp.InQuotes() + " /Fo:" + File.InQuotes() + " -c", Executable = cl};
+            var args = new Shell.ExecuteArgs {Arguments = tmp.InQuotes() + _codeGenArguments+ " /Fo:" + File.InQuotes() + " -c", Executable = cl};
 
             using (TinyProfiler.Section("Compile " + _cppFile.File))
                 Shell.ExecuteAndCaptureOutput(args);
@@ -64,8 +63,13 @@ namespace csb2
             var result = task.Result;
 
             tmp.Delete();
-            return new PreviousBuildsDatabase.Entry() {Name = Name, OutOfGraphDependencies = result.Select(r=>new PreviousBuildsDatabase.OutOfGraphDependency() {Name = r, TimeStamp = new NPath(r).TimeStamp}).ToArray(), TimeStamp = File.TimeStamp};
+            return new PreviousBuildsDatabase.Entry() {Name = Name, OutOfGraphDependencies = result.Select(r=>new PreviousBuildsDatabase.OutOfGraphDependency() {Name = r, TimeStamp = new NPath(r).TimeStamp}).ToArray(), TimeStamp = File.TimeStamp, CacheKey = InputsHash};
 
+        }
+
+        protected override PreviousBuildsDatabase.Entry EntryForResultFromCache()
+        {
+            return new PreviousBuildsDatabase.Entry() { Name = Name, OutOfGraphDependencies = new PreviousBuildsDatabase.OutOfGraphDependency[0], TimeStamp = File.TimeStamp, CacheKey = InputsHash };
         }
 
         string[] FindIncludedFilesInPreprocessorOutput(NPath preprocessorOutput)
@@ -90,31 +94,10 @@ namespace csb2
 
         public override bool SupportsNetworkCache => true;
 
-        public override string NetworkCacheKey => GetChecksum(_cppFile.File);
+        public override string InputsHash => Hashing.CalculateHash(Hashing.CalculateHash(_cppFile.File) + _codeGenArguments).ToString();
 
         public ObjectNode[] ObjectNodes => new[] {this};
         public override string NodeTypeIdentifier => "Obj";
-
-        static UInt64 CalculateHash(string read)
-        {
-            UInt64 hashedValue = 3074457345618258791ul;
-            for (int i = 0; i < read.Length; i++)
-            {
-                hashedValue += read[i];
-                hashedValue *= 3074457345618258799ul;
-            }
-            return hashedValue;
-        }
-
-        private static string GetChecksum(NPath file)
-        {
-            using (FileStream stream = System.IO.File.OpenRead(file.ToString()))
-            {
-                var sha = new SHA256Managed();
-                byte[] checksum = sha.ComputeHash(stream);
-                return BitConverter.ToString(checksum).Replace("-", String.Empty);
-            }
-        }
     }
 
 

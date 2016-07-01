@@ -103,9 +103,9 @@ namespace csb2
                     }
 
                     using (TinyProfiler.Section("Build: " + job.Name))
-                        BuildNode(job);
+                        BuildNode(job, "Local" + workedThreadIndex);
                     
-                    LogBuild(job, "Local" + workedThreadIndex);
+                   
 
                     _mainThreadEvent.Set();
                 }
@@ -145,13 +145,14 @@ namespace csb2
             }
         }
 
-        private void BuildNode(Node job)
+        private void BuildNode(Node job, string source)
         {
             if (!job.Build())
             {
                 job.State = State.Failed;
                 throw new BuildFailedException("Failed building " + job);
             }
+            LogBuild(job, source);
             job.State = State.UpToDate;
             
         }

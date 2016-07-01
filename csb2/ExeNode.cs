@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using NiceIO;
 using Unity.IL2CPP;
 using Unity.IL2CPP.Building;
@@ -29,12 +30,37 @@ namespace csb2
 
             Shell.ExecuteAndCaptureOutput(args);
 
+            return MakeDBEntry();
+        }
+
+        private PreviousBuildsDatabase.Entry MakeDBEntry()
+        {
             return new PreviousBuildsDatabase.Entry()
             {
                 Name = Name,
                 TimeStamp = File.TimeStamp,
-                OutOfGraphDependencies = _objectNodes.Select(o => new PreviousBuildsDatabase.OutOfGraphDependency() {Name = o.File.ToString(), TimeStamp = o.File.TimeStamp}).ToArray()
+                OutOfGraphDependencies = _objectNodes.Select(o => new PreviousBuildsDatabase.OutOfGraphDependency() {Name = o.File.ToString(), TimeStamp = o.File.TimeStamp}).ToArray(),
+                CacheKey = NetworkCacheKey
             };
+        }
+
+        public override bool SupportsNetworkCache => true;
+
+
+        protected override PreviousBuildsDatabase.Entry EntryForResultFromCache()
+        {
+            return MakeDBEntry();
+        }
+
+        public override string NetworkCacheKey
+        {
+            get
+            {
+                var sb = new StringBuilder(File.FileName);
+                foreach (var o in _objectNodes)
+                    sb.Append(Hashing.CalculateHash(o.File));
+                return Hashing.CalculateHash(sb.ToString()).ToString();
+            }
         }
 
         public override string NodeTypeIdentifier => "Exe";

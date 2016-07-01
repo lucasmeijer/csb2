@@ -107,6 +107,7 @@ namespace csb2
 
                 job.File.WriteAllBytes(filePayLoad.Content);
 
+                job.ResolvedFromCache();
                 job.State = State.UpToDate;
 
                 _builder.LogBuild(job, "Cache");
