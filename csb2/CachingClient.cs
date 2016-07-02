@@ -75,14 +75,14 @@ namespace csb2
         {
             using (TinyProfiler.Section("CacheClient " + job.Name))
             {
-                var cacheKey = job.InputsHash;
+                var inputsHash = job.InputsHash;
                 var client = new JsonServiceClient(CachingServer.Url);
 
                 CacheResponse result = new CacheResponse() {Files = new List<FilePayLoad>()};
                 try
                 {
                     using (TinyProfiler.Section("Get " + job.Name))
-                        result = client.Get(new CacheRequest() {Key = cacheKey, Name = job.Name});
+                        result = client.Get(new CacheRequest() {Key = inputsHash, Name = job.Name});
                 }
                 catch (WebException)
                 {
@@ -107,11 +107,16 @@ namespace csb2
 
                 job.File.WriteAllBytes(filePayLoad.Content);
 
-                job.ResolvedFromCache();
-                job.State = State.UpToDate;
-
-                _builder.LogBuild(job, "Cache");
-
+                var jobResult = new JobResult()
+                {
+                    BuildInfo = new PreviousBuildsDatabase.Entry() {File = job.File.ToString(), InputsHash = inputsHash, TimeStamp = job.File.TimeStamp},
+                    Node = job,
+                    Output = result.Output,
+                    Source = "Cache",
+                    Success = true
+                };
+                _builder._completedJobs.Enqueue(jobResult);
+                
                 _builder._mainThreadEvent.Set();
             }
         }
@@ -130,12 +135,12 @@ namespace csb2
                 _builder.QueueJobNoCaching(job);
         }
 
-        public static void Store(string networkCacheKey, NPath file)
+        public static void Store(string networkCacheKey, NPath file, string output)
         {
             var bytes = file.ReadAllBytes();
             Task.Run(() =>
             {
-                var cacheStore = new CacheStore() {Key = networkCacheKey, Name = file.FileName, Files = new List<FilePayLoad>() {new FilePayLoad() {Name = file.FileName, Content = bytes}}};
+                var cacheStore = new CacheStore() {Key = networkCacheKey, Name = file.FileName, Output = output, Files = new List<FilePayLoad>() {new FilePayLoad() {Name = file.FileName, Content = bytes}}};
                 new JsonServiceClient(CachingServer.Url).Post(cacheStore);
             });
         }

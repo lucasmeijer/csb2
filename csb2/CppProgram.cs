@@ -8,9 +8,9 @@ namespace csb2
         public CppProgram(string name, NPath file, NPath directory) : base(name)
         {
             var objectNodes =
-                directory.Files("*.cpp").Select(sourceFile => new ObjectNode(new SourceFileNode(sourceFile), Artifacts.Combine(sourceFile.RelativeTo(directory).ChangeExtension(".obj")), new NPath[0])).ToArray();
+                directory.Files("*.cpp").Select(sourceFile => new ObjectNode(new SourceFileNode(sourceFile), Artifacts.Combine(sourceFile.RelativeTo(directory).ChangeExtension(".obj")), new NPath[0], new string[0], new [] {"-O2"})).ToArray();
 
-            var exeNode = new ExeNode(file, objectNodes);
+            var exeNode = new ExeNode(file, objectNodes, new NPath[0], new string[0]);
             SetStaticDependencies(exeNode);
         }
 

@@ -175,7 +175,7 @@ namespace Unity.IL2CPP
 
 			if (executeArgs.EnvVars != null)
 			    foreach (var envVar in executeArgs.EnvVars)
-			        p.StartInfo.EnvironmentVariables.Add(envVar.Key, envVar.Value);
+			        p.StartInfo.EnvironmentVariables[envVar.Key] = envVar.Value;
 
 			return p;
 		}

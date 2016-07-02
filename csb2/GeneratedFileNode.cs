@@ -10,7 +10,29 @@ namespace csb2
         protected GeneratedFileNode(NPath file) : base(file)
         {
         }
-        
+
+        public void Process()
+        {
+            CalculateInputHash();
+
+            //Check option against PreviousDatabase
+            //if match -> state = UpToDate, return.
+
+            //if caching-read-enabled
+            //queue with CacheClientThread & return
+
+            //if distribution enabled && availablity
+            //  queue with distribution thread & return
+            
+            //build right here
+        }
+
+        private void CalculateInputHash()
+        {
+            throw new NotImplementedException();
+        }
+
+
         public virtual bool SupportsNetworkCache => false;
         public abstract string InputsHash { get; }
 
@@ -35,34 +57,28 @@ namespace csb2
             return null;
         }
 
-        public sealed override bool Build()
+        public sealed override JobResult Build()
         {
             File.Parent.EnsureDirectoryExists();
 
-            var entry = BuildGeneratedFile();
+            var jobResult = BuildGeneratedFile();
+            if (!jobResult.Success)
+                return jobResult;
 
-            PreviousBuildsDatabase.Instance.SetInfoFor(entry);
+            PreviousBuildsDatabase.Instance.SetInfoFor(jobResult.BuildInfo);
+            
+//            if (SupportsNetworkCache)
+  //              CachingClient.Store(InputsHash, File, jobResult.Output);
 
-            if (SupportsNetworkCache)
-                CachingClient.Store(InputsHash, File);
-
-            return entry != null;
+            return jobResult;
         }
-
-
-        public void ResolvedFromCache()
-        {
-            var entry = EntryForResultFromCache();
-
-            PreviousBuildsDatabase.Instance.SetInfoFor(entry);
-        }
-
+        
         protected virtual PreviousBuildsDatabase.Entry EntryForResultFromCache()
         {
             throw new InvalidOperationException();
         }
 
-        protected abstract PreviousBuildsDatabase.Entry BuildGeneratedFile();
+        protected abstract JobResult BuildGeneratedFile();
 
     }
 }

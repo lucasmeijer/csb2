@@ -73,14 +73,16 @@ namespace csb2
             var headerNames = Parse(file);
 
             var files = new List<NPath>();
+            var compiledIncludeDirs = includeDirectories.Concat(toolChainIncludeDirectories).ToArray();
+            
             foreach (var headerName in headerNames)
             {
-                var includedFile = Resolve(headerName, file.Parent, includeDirectories.Concat(toolChainIncludeDirectories));
+                var includedFile = Resolve(headerName, file.Parent, compiledIncludeDirs);
                 if (includedFile == null)
                     continue;
-
+                
                 //not scan systeam headers as an optimization
-                if (toolChainIncludeDirectories.Any(i => includedFile.IsChildOf(i)))
+                if (!includedFile.IsRelative && toolChainIncludeDirectories.Any(i => includedFile.IsChildOf(i)) || includedFile.ToString().Contains("Program Files"))
                     continue;
 
                 //           throw new ArgumentException("Unable to resolve: " + headerName + " for " + _cppFile.File);
@@ -89,7 +91,7 @@ namespace csb2
                 alreadyProcessed.Add(includedFile);
                 files.Add(includedFile);
 
-                files.AddRange(FindIncludedFiles(includedFile, includeDirectories, alreadyProcessed));
+                files.AddRange(FindIncludedFiles(includedFile, includeDirectories, toolChainIncludeDirectories, alreadyProcessed));
             }
 
             _includedFilesCache[keyString] = files.ToArray();

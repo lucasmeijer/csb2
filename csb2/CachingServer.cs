@@ -21,6 +21,7 @@ namespace csb2.Caching
     {
         public string Name { get; set; }
         public string Key { get; set; }
+        public string Output { get; set; }
         public List<FilePayLoad> Files { get; set; }
     }
 
@@ -33,6 +34,7 @@ namespace csb2.Caching
     internal class CacheResponse
     {
         public List<FilePayLoad> Files { get; set; } = new List<FilePayLoad>();
+        public string Output { get; set; }
     }
     
     class CachingServer

@@ -22,7 +22,7 @@ namespace csb2
                 {
                     var values = Serializer.Deserialize<EntryContainer>(file).entries;
                     foreach (var value in values)
-                        _entries.TryAdd(value.Name, value);
+                        _entries.TryAdd(value.File, value);
                 }
             }
             Instance = this;
@@ -49,7 +49,7 @@ namespace csb2
         public class Entry
         {
             [ProtoMember(1)]
-            public string Name;
+            public string File;
             [ProtoMember(2)]
             public DateTime TimeStamp;
             [ProtoMember(3)]
@@ -63,7 +63,7 @@ namespace csb2
 
         public void SetInfoFor(Entry entry)
         {
-            _entries[entry.Name] = entry;
+            _entries[entry.File] = entry;
         }
     }
 }

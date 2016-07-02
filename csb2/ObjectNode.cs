@@ -2,11 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Policy;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using NiceIO;
 using Unity.IL2CPP;
 using Unity.IL2CPP.Building;
@@ -19,53 +16,68 @@ namespace csb2
     {
         private readonly FileNode _cppFile;
         private readonly NPath[] _includeDirs;
-        private string _codeGenArguments = "-O2";
+        private readonly string[] _defines;
+        private readonly string[] _flags;
 
-        public ObjectNode(FileNode cppFile, NPath objectFile, NPath[] includeDirs) : base(objectFile)
+        public ObjectNode(FileNode cppFile, NPath objectFile, NPath[] includeDirs, string[] defines, string[] flags) : base(objectFile)
         {
             _cppFile = cppFile;
             _includeDirs = includeDirs;
+            _defines = defines;
+            _flags = flags;
             SetStaticDependencies(_cppFile);
         }
-        
-        protected override PreviousBuildsDatabase.Entry BuildGeneratedFile()
+
+        protected override JobResult BuildGeneratedFile()
         {
             var includeArguments = new StringBuilder();
 
             foreach (var includeDir in AllIncludeDirectories)
                 includeArguments.Append("-I" + includeDir.InQuotes() + " ");
-            
-            var tmp = NPath.SystemTemp.Combine("csb2").EnsureDirectoryExists().Combine(Hashing.CalculateHash(_cppFile.File.ToString()).ToString()).ChangeExtension("cpp");
-            var cl = MsvcInstallation.GetLatestInstalled().GetVSToolPath(new x86Architecture(), "cl.exe").ToString();
 
-            /*
-            var preprocessorargs = new Shell.ExecuteArgs {Arguments = includeArguments + _cppFile.File.InQuotes() + "  /P /Fi:" + tmp, Executable = cl};
-            
-            using (TinyProfiler.Section("PreProcessor " + _cppFile.File))
-                Shell.ExecuteAndCaptureOutput(preprocessorargs);
-                */
+            var cl = MsvcInstallation.GetInstallation(new Version(10, 0)).GetVSToolPath(new x64Architecture(), "cl.exe").ToString();
 
+            var fullArgs = new Shell.ExecuteArgs {Arguments = includeArguments + " " + DefineAndFlagArguments() + " /nologo /Fo" + File.InQuotes(SlashMode.Forward) + " " + _cppFile.File.InQuotes(SlashMode.Forward), Executable = cl};
 
-      var fullArgs = new Shell.ExecuteArgs { Arguments = includeArguments + " " + _codeGenArguments + " "+_cppFile.File.InQuotes() + " /Fo:" + File.InQuotes() + " -c", Executable = cl };
+            Shell.ExecuteResult executeResult;
+            using (TinyProfiler.Section("CompileFull " + _cppFile.File))
+                executeResult = Shell.Execute(fullArgs);
 
-      using (TinyProfiler.Section("CompileFull " + _cppFile.File))
-          Shell.ExecuteAndCaptureOutput(fullArgs);
-      var showIncludes = new Shell.ExecuteArgs { Arguments = includeArguments + _cppFile.File.InQuotes() + " /showIncludes -c", Executable = cl };
-            
+            var output = executeResult.StdOut + executeResult.StdErr;
 
-            
+            if (output.StartsWith(_cppFile.File.FileName))
+                output = output.Substring(File.FileName.Length).Trim();
 
-            return new PreviousBuildsDatabase.Entry() {Name = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash};
+            return new JobResult()
+            {
+                BuildInfo = new PreviousBuildsDatabase.Entry() {File = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash},
+                Success = executeResult.ExitCode == 0,
+                Output = output,
+                Input = fullArgs.Arguments,
+                Node = this
+            };
 
+        }
+
+        private string DefineAndFlagArguments()
+        {
+            var sb = new StringBuilder();
+
+            foreach (var define in _defines)
+                sb.Append("-D" + define+" ");
+            foreach (var flag in _flags)
+                sb.Append(flag + " ");
+            sb.Append(" /c ");
+            return sb.ToString();
         }
 
         private IEnumerable<NPath> AllIncludeDirectories => _includeDirs.Concat(ToolChainIncludeDirectories);
 
-        private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetLatestInstalled().GetIncludeDirectories();
+        private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetInstallation(new Version(10,0)).GetIncludeDirectories();
 
         protected override PreviousBuildsDatabase.Entry EntryForResultFromCache()
         {
-            return new PreviousBuildsDatabase.Entry() { Name = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash };
+            return new PreviousBuildsDatabase.Entry() { File = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash };
         }
 
         IEnumerable<NPath> FindIncludedFiles(NPath file, HashSet<NPath> alreadyProcessed = null )

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using csb2.Caching;
 using NiceIO;
 using Unity.TinyProfiling;
@@ -29,18 +30,26 @@ namespace csb2
                     }
                 }
 
+                var unityEditor = new UnityEditor();
+
                 PreviousBuildsDatabase db;
                 using (TinyProfiler.Section("Load Database"))
                     db = new PreviousBuildsDatabase(new NPath("c:/test/database"));
 
-                var aliasNode = new AliasNode("all", cppPrograms.ToArray());
+                var aliasNode = new AliasNode("all", new[] { unityEditor });
                 var builder = new Builder(db);
                 using (TinyProfiler.Section("Build"))
                     builder.Build(aliasNode);
                 using (TinyProfiler.Section("Save Database"))
+                {
+                    Console.WriteLine("Saving Database");
                     db.Save();
+                }
                 using (TinyProfiler.Section("Save HashDatabase"))
+                {
+                    Console.WriteLine("Saving HashDatabase");
                     FileHashProvider.Instance.Save();
+                }
 
             }
         }

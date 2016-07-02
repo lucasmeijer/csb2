@@ -48,9 +48,9 @@ namespace csb2
 //            return new UpdateReason($"Nodes of type {GetType()} always rebuild");
         }
 
-        public virtual bool Build()
+        public virtual JobResult Build()
         {
-            return true;
+            throw new InvalidOperationException();
         }
 
         public override string ToString()

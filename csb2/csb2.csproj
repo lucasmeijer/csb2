@@ -89,6 +89,8 @@
     <Compile Include="GraphMaker.cs" />
     <Compile Include="Hashing.cs" />
     <Compile Include="IncludeParser.cs" />
+    <Compile Include="JamOutput.cs" />
+    <Compile Include="JamOutputParser.cs" />
     <Compile Include="Palette.cs" />
     <Compile Include="SourceFileNode.cs" />
     <Compile Include="Msvc10Installation.cs" />
@@ -103,6 +105,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Shell.cs" />
     <Compile Include="TinyProfiler.cs" />
+    <Compile Include="UnityEditor.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
