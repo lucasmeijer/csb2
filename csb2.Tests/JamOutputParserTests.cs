@@ -30,6 +30,12 @@ namespace csb2.Tests
             ParseAndAssert(@"""/Ihello""", "/Ihello");
         }
 
+        class CacheEntry<T>
+        {
+            public string fieldName;
+            public T[] elements;
+        }
+
         [Test]
         public void FindInvocationLinesInJamOutput()
         {
@@ -41,6 +47,11 @@ namespace csb2.Tests
             var cs = new StringBuilder();
             HashSet<string> processed = new HashSet<string>();
             cs.AppendLine("using System.Collections.Generic; using csb2; using NiceIO; public static class JamOutput { public static IEnumerable<ObjectNode> GetObjectNodes() { var objects = new List<ObjectNode>(); ");
+
+            Dictionary<string, CacheEntry<string>> _defineSets = new Dictionary<string, CacheEntry<string>>();
+            Dictionary<string, CacheEntry<string>> _flagsSets = new Dictionary<string, CacheEntry<string>>();
+            Dictionary<string, CacheEntry<NPath>> _includeSets = new Dictionary<string, CacheEntry<NPath>>();
+
             for (int i = 0; i != lines.Length; i++)
             {
                 if (!lines[i].StartsWith("/T")) continue;
@@ -50,8 +61,8 @@ namespace csb2.Tests
                     continue;
                 if (processed.Contains(cpp))
                     continue;
-                if (cpp.Contains("videoInput"))
-                    continue;
+              //  if (cpp.Contains("videoInput"))
+                //    continue;
                 processed.Add(cpp);
 
                 var file = new NPath(cpp);
@@ -63,11 +74,17 @@ namespace csb2.Tests
                 var outputObjFile = outputPath.Combine(file.FileName).ChangeExtension(".obj");
 
               
-                cs.AppendLine($"objects.Add(new ObjectNode(");
+                cs.AppendLine($"yield return (new ObjectNode(");
                 cs.AppendLine($"\t\tnew SourceFileNode(new NPath(\"{file.ToString(SlashMode.Forward)}\")), ");
                 cs.AppendLine($"\t\tnew NPath(\"{outputObjFile.ToString(SlashMode.Forward)}\"),");
 
+
                 var includeDirs = flags.Where(f => f.StartsWith("/I")).Select(s3=>parser.StripFullyQuoted(s3.Substring(2)))/*.Where(s => !s.Contains("Program Files"))*/.Distinct().Select(s2 => new NPath(s2));
+
+                var fieldName = GetFieldNameFor(includeDirs, _includeSets, "_includes");
+
+                cs.AppendLine($"\t\t{fieldName},");
+                /*
                 cs.AppendLine("\t\tnew [] {");
                 foreach (var includeDir in includeDirs)
                 {
@@ -77,36 +94,97 @@ namespace csb2.Tests
                         continue;
                     cs.AppendLine($"\t\t\tnew NPath(\"{includeDir.ToString(SlashMode.Forward)}\"),");
                 }
-                cs.AppendLine("},");
+                cs.AppendLine("},");*/
 
                 var defines = flags.Where(f => f.StartsWith("/D")).Distinct().Select(d => d.Substring(2));
+                
+                cs.AppendLine($"\t\t{GetFieldNameFor(defines, _defineSets, "_defines")},");
+                /*
                 cs.AppendLine("\t\tnew [] {");
                 foreach (var define in defines)
                 {
                     cs.AppendLine($"\t\t\t\"{define}\",");
                 }
-                cs.AppendLine("},");
+                cs.AppendLine("},");*/
                 
                 var skipflags = new[] {"/D", "/I", "/Fo", "/Fd", "/c", "/Fp", "/Yc", "/Yl","/Yu","/DEBUG"};
-                var restFlags = flags.Where(f => !skipflags.Any(f.StartsWith)).Distinct().Select(EscapeQuotes);
-                
+                var restFlags = flags.Where(f => !skipflags.Any(f.StartsWith)).Distinct().ToArray();
+
+                cs.AppendLine($"\t\t{GetFieldNameFor(restFlags, _flagsSets, "_flags")}");
+                /*
                 cs.AppendLine("\t\tnew [] {");
                 foreach (var restFlag in restFlags)
                 {
                     cs.AppendLine($"\t\t\t\"{restFlag}\",");
                 }
-                cs.AppendLine("}));");
+                */
+                cs.AppendLine("));");
 
-
-               // if (processed.Count > 50)
-                 //   break;
+                //if (processed.Count > 200)
+                //  break;
 
             }
-            cs.AppendLine("return objects;}}");
+            //            cs.AppendLine("return objects;");
+            cs.AppendLine("}");
+
+            foreach (var entry in _includeSets.Values)
+            {
+                cs.AppendLine($"\tstatic NPath[] {entry.fieldName} = new [] {{");
+                foreach (var includeDir in entry.elements)
+                {
+                    if (includeDir.ToString() == ".")
+                        continue;
+                    if (includeDir.ToString().Contains("dshow/include"))
+                        continue;
+                    cs.AppendLine($"\t\tnew NPath(\"{includeDir.ToString(SlashMode.Forward)}\"),");
+                }
+                cs.AppendLine("};");
+            }
+
+            foreach (var entry in _defineSets.Values)
+            {
+                cs.AppendLine($"\t\tstatic string[] {entry.fieldName} = new [] {{");
+                foreach (var define in entry.elements)
+                {
+                    cs.AppendLine($"\t\t\t\"{EscapeQuotes(define)}\",");
+                }
+                cs.AppendLine("};");
+            }
+
+            foreach (var entry in _flagsSets.Values)
+            {
+                cs.AppendLine($"\t\tstatic string[] {entry.fieldName} = new [] {{");
+                foreach (var restFlag in entry.elements)
+                {
+                    cs.AppendLine($"\t\t\t\"{EscapeQuotes(restFlag)}\",");
+                }
+                cs.AppendLine("};");
+            }
+
+            cs.AppendLine("}");
+
 
             new NPath("c:/users/lucas/desktop/csb2/csb2/JamOutput.cs").WriteAllText(cs.ToString());
 
         }
+
+        private string GetFieldNameFor<T>(IEnumerable<T> inputs, Dictionary<string, CacheEntry<T>> set, string fieldNamePrefix)
+        {
+            var sb = new StringBuilder();
+            foreach (var path in inputs)
+                sb.Append(path.ToString());
+            var sig = sb.ToString();
+
+            CacheEntry<T> cacheEntry;
+            if (!set.TryGetValue(sig, out cacheEntry))
+            {
+                T[] elements = inputs.ToArray();
+                cacheEntry = new CacheEntry<T>() {fieldName = fieldNamePrefix + set.Count, elements = elements};
+                set[sig] = cacheEntry;
+            }
+            return cacheEntry.fieldName;
+        }
+
 
         private object EscapeQuotes(string arg)
         {

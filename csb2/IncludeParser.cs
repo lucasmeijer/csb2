@@ -2,7 +2,9 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Linq;
+using System.Net.Configuration;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -56,46 +58,55 @@ namespace csb2
 
         private readonly ConcurrentDictionary<string, NPath[]> _includedFilesCache = new ConcurrentDictionary<string, NPath[]>();
 
-        public IEnumerable<NPath> FindIncludedFiles(NPath file, IEnumerable<NPath> includeDirectories, IEnumerable<NPath> toolChainIncludeDirectories, HashSet<NPath> alreadyProcessed = null)
+        public IEnumerable<NPath> FindIncludedFiles(NPath file, NPath[] includeDirectories)
         {
             var key = new StringBuilder(file.ToString());
             foreach (var i in includeDirectories)
                 key.Append(i);
+            var cacheKey = key.ToString();
+
 
             NPath[] result;
-            var keyString = key.ToString();
-            if (_includedFilesCache.TryGetValue(keyString, out result))
+            if (_includedFilesCache.TryGetValue(cacheKey, out result))
                 return result;
 
-            if (alreadyProcessed==null)
-                alreadyProcessed = new HashSet<NPath>();
+            var results = new List<NPath>();
+            var toProcess = new Queue<NPath>();
+            toProcess.Enqueue(file);
+            results.Add(file);
+            
+            while (toProcess.Any())
+            {
+                var f = toProcess.Dequeue();
+                
+                var directlyIncludedFiles = FindDirectlyIncludedFiles(f, includeDirectories, cacheKey);
+                foreach(var includedFile in directlyIncludedFiles)
+                    if (!results.Contains(includedFile))
+                    {
+                        toProcess.Enqueue(includedFile);
+                        results.Add(includedFile);
+                    }
+            }
+
+            var resultsArray = results.ToArray();
+            _includedFilesCache[cacheKey] = resultsArray;
+
+            return resultsArray;
+        }
+
+        private readonly ConcurrentDictionary<string, NPath[]> _directlyIncludedFilesCache = new ConcurrentDictionary<string, NPath[]>();
+
+        NPath[] FindDirectlyIncludedFiles(NPath file, NPath[] includeDirectories, string cacheKey)
+        {
+            NPath[] result;
+            if (_directlyIncludedFilesCache.TryGetValue(cacheKey, out result))
+                return result;
 
             var headerNames = Parse(file);
 
-            var files = new List<NPath>();
-            var compiledIncludeDirs = includeDirectories.Concat(toolChainIncludeDirectories).ToArray();
-            
-            foreach (var headerName in headerNames)
-            {
-                var includedFile = Resolve(headerName, file.Parent, compiledIncludeDirs);
-                if (includedFile == null)
-                    continue;
-                
-                //not scan systeam headers as an optimization
-                if (!includedFile.IsRelative && toolChainIncludeDirectories.Any(i => includedFile.IsChildOf(i)) || includedFile.ToString().Contains("Program Files"))
-                    continue;
-
-                //           throw new ArgumentException("Unable to resolve: " + headerName + " for " + _cppFile.File);
-                if (alreadyProcessed.Contains(includedFile))
-                    continue;
-                alreadyProcessed.Add(includedFile);
-                files.Add(includedFile);
-
-                files.AddRange(FindIncludedFiles(includedFile, includeDirectories, toolChainIncludeDirectories, alreadyProcessed));
-            }
-
-            _includedFilesCache[keyString] = files.ToArray();
-            return files;
+            result = headerNames.Select(headerName => Resolve(headerName, file.Parent, includeDirectories)).Where(includedFile => includedFile != null && !includedFile.ToString().Contains("Program Files")).ToArray();
+            _directlyIncludedFilesCache.TryAdd(cacheKey, result);
+            return result;
         }
     }
 }

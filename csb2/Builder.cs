@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -16,7 +17,7 @@ namespace csb2
         private readonly PreviousBuildsDatabase _previousBuildsDatabase;
         private readonly Queue<Node> m_Jobs = new Queue<Node>();
         
-        public FileHashProvider FileHashProvider { get; } = new FileHashProvider(new NPath("c:/test/hashdatabase"));
+        public FileHashProvider FileHashProvider { get; } 
 
         private int _totalEstimatedCost = 1;
         private int _remainingEstimatedCost = 0;
@@ -34,8 +35,9 @@ namespace csb2
 
         public ConcurrentQueue<JobResult> _completedJobs = new ConcurrentQueue<JobResult>();
 
-        public Builder(PreviousBuildsDatabase previousBuildsDatabase)
+        public Builder(PreviousBuildsDatabase previousBuildsDatabase, FileHashProvider _fileHashProvider)
         {
+            FileHashProvider = _fileHashProvider;
             _previousBuildsDatabase = previousBuildsDatabase;
         }
 
@@ -47,7 +49,7 @@ namespace csb2
             Console.CancelKeyPress += new ConsoleCancelEventHandler(MyControlCHandler);
 
             var workerThreads = new List<Thread>();
-            for (int i=0; i!=10;i++)
+            for (int i=0; i!=13;i++)
             {
                 var thread = new Thread(WorkerThread);
                 thread.Start(i);
@@ -55,17 +57,17 @@ namespace csb2
                 workerThreads.Add(thread);
             }
            
-            _cachingClient = new CachingClient(this);
-            _cachingClient.Enabled = false;
+            //_cachingClient = new CachingClient(this);
+            //_cachingClient.Enabled = false;
 
             while (true)
             {
                 int costRemaining;
-                State state;
+                ProgressState state;
                 int i = 0;
                 using (TinyProfiler.Section("DoPass"+i))
                     state = DoPass(nodeToBuild, out costRemaining);
-                if (state != State.Building)
+                if (state == ProgressState.Failed || state == ProgressState.Ready || _quit)
                 {
                     i++;
                     _workerThreadsShouldExit = true;
@@ -85,7 +87,9 @@ namespace csb2
                     return;
                 }
 
-                ProcessCompletedJobs();
+                using (TinyProfiler.Section("ProcessCompleteJobs"))
+                    if (ProcessCompletedJobs())
+                        continue;
 
                 _remainingEstimatedCost = costRemaining;
                 using (TinyProfiler.Section("Waiting for completion of a job"))
@@ -101,24 +105,31 @@ namespace csb2
             e.Cancel = true;
         }
 
-        private void ProcessCompletedJobs()
+        private bool ProcessCompletedJobs()
         {
+            bool processedAny = false;
             while (!_quit)
             {
                 JobResult jobResult;
-                if (!_completedJobs.TryDequeue(out jobResult))
-                    return;
 
-                LogJobResult(jobResult);
-                jobResult.Node.State = jobResult.Success ? State.UpToDate : State.Failed;
-
-                if (!jobResult.Success)
+                using (TinyProfiler.Section("TryDequeue"))
                 {
-                    //_quit = true;
-                    return;
+                    if (!_completedJobs.TryDequeue(out jobResult))
+                        return processedAny;
                 }
-                _previousBuildsDatabase.SetInfoFor(jobResult.BuildInfo);
+
+                processedAny = true;
+
+                if (jobResult.ResultState != State.UpToDate)
+                    using (TinyProfiler.Section("LogJobResult"))
+                        LogJobResult(jobResult);
+                jobResult.Node.State = jobResult.ResultState;
+
+                if (jobResult.ResultState == State.Built)
+                    using (TinyProfiler.Section("SetInfoFor"))
+                        _previousBuildsDatabase.SetInfoFor(jobResult.BuildInfo);
             }
+            return processedAny;
         }
 
         void WorkerThread(object indexObject)
@@ -143,11 +154,25 @@ namespace csb2
                         job = m_Jobs.Dequeue();
                     }
 
-                    using (TinyProfiler.Section("Build: " + job.Name))
-                        BuildNode(job, "Local" + workedThreadIndex);
-                    
-                   
-
+                    UpdateReason updateReason;
+                    var nodeToBuild = job;
+                    using (TinyProfiler.Section("DetermineNeedToBuild",nodeToBuild.Name))
+                        updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
+                    if (updateReason == null)
+                    {
+                        _completedJobs.Enqueue(new JobResult() {ResultState = State.UpToDate, Node = nodeToBuild});
+                    }
+                    else
+                    {
+                        nodeToBuild.SetUpdateReason(updateReason);
+                        nodeToBuild.State = State.Building;
+                        using (TinyProfiler.Section("Build",job.Name))
+                        {
+                            var jobResult = job.Build();
+                            jobResult.Source = "Local" + workedThreadIndex;
+                            _completedJobs.Enqueue(jobResult);
+                        }
+                    }
                     _mainThreadEvent.Set();
                 }
             }    
@@ -161,11 +186,11 @@ namespace csb2
             var paddedWorkerIdentifier = $"{jobResult.Source.PadRight(7)}>";
             Console.Write(paddedWorkerIdentifier);
 
-            Console.ForegroundColor = jobResult.Success ? ConsoleColor.Green : ConsoleColor.Red;
+            Console.ForegroundColor = jobResult.ResultState == State.Built ? ConsoleColor.Green : ConsoleColor.Red;
             Console.Write(nodeIdentifier);
             Console.ResetColor();
             Console.WriteLine(jobResult.Node.Name);
-            if (jobResult.Success == false)
+            if (jobResult.ResultState == State.Failed)
                 Console.WriteLine(jobResult.Input);
             if (!string.IsNullOrEmpty(jobResult.Output))
                 Console.WriteLine(jobResult.Output.Length > 4000 ? jobResult.Output.Substring(0, 2000) + "\n\n<<SNIPPED>>\n\n" + jobResult.Output.Substring(jobResult.Output.Length-2000) : jobResult.Output);
@@ -186,111 +211,106 @@ namespace csb2
             Console.Write($"\r[{bar}] {percentage}%");
         }
 
-        private void BuildNode(Node job, string source)
-        {
-            var jobResult = job.Build();
-            jobResult.Source = source;
-            _completedJobs.Enqueue(jobResult);
-
-        }
-
-        private State DoPass(Node nodeToBuild, out int remaininCost)
+        private ProgressState DoPass(Node nodeToBuild, out int remaininCost)
         {
             remaininCost = 0;
 
-            if (nodeToBuild.State == State.UpToDate)
-                return State.UpToDate;
-
-            remaininCost += nodeToBuild.EstimatedCost;
-
-            if (nodeToBuild.State == State.Building)
-                return State.Building;
-
-            if (nodeToBuild.State == State.Failed)
-                return State.Failed;
-
-            if (nodeToBuild.State == State.NotProcessed)
+            if (nodeToBuild.NeverBuilds)
+                return ProgressState.Ready;
+            
+            switch (nodeToBuild.State)
             {
-                int costOfRemainingDependencies = 0;
-                //using (TinyProfiler.Section("RecurseIntoStaticDeps: " + nodeToBuild.Name))
-                {
-                    var dependenciesState = RecurseIntoDependencies(nodeToBuild.StaticDependencies, out costOfRemainingDependencies);
-                    if (dependenciesState == State.Building)
-                    {
-                        remaininCost += costOfRemainingDependencies;
-                        return State.Building;
-                    }
-                    if (dependenciesState == State.Failed)
-                        return State.Failed;
+                case State.UpToDate:
+                case State.Built:
+                    return ProgressState.Ready;
 
-                }
-                nodeToBuild.State = State.StaticDependenciesReady;
+                case State.Building:
+                case State.Processing:
+                    return ProgressState.StillWorking;
+                case State.Failed:
+                    return ProgressState.Failed;
+
+                case State.NotProcessed:
+                    int costOfRemainingDependencies = 0;
+                    //using (TinyProfiler.Section("RecurseIntoStaticDeps: " + nodeToBuild.Name))
+
+                    var dependenciesState = RecurseIntoDependencies(nodeToBuild.StaticDependencies, out costOfRemainingDependencies);
+                    switch (dependenciesState)
+                    {
+                        case ProgressState.StillWorking:
+                            remaininCost += costOfRemainingDependencies;
+                            return dependenciesState;
+                        case ProgressState.Failed:
+                            return ProgressState.Failed;
+                    }
+                    nodeToBuild.State = State.StaticDependenciesReady;
+                    break;
             }
 
             if (nodeToBuild.State == State.StaticDependenciesReady)
             {
                 int costOfRemainingDependencies = 0;
                 var dependenciesState = RecurseIntoDependencies(nodeToBuild.DynamicDependencies, out costOfRemainingDependencies);
-                if (dependenciesState == State.Building)
+                switch (dependenciesState)
                 {
-                    remaininCost += costOfRemainingDependencies;
-                    return State.Building;
+                    case ProgressState.StillWorking:
+                        remaininCost += costOfRemainingDependencies;
+                        return dependenciesState;
+                    case ProgressState.Failed:
+                        return ProgressState.Failed;
                 }
-                if (dependenciesState == State.Failed)
-                    return State.Failed;
                 nodeToBuild.State = State.AllDependenciesReady;
             }
             
             if (nodeToBuild.State == State.AllDependenciesReady)
             {
-                UpdateReason updateReason;
-                using (TinyProfiler.Section("DetermineNeedToBuild: " + nodeToBuild.Name))
-                    updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
-                if (updateReason == null)
-                {
-                    //Console.WriteLine("Already UpToDate: "+nodeToBuild);
-                    nodeToBuild.State = State.UpToDate;
-                    return State.UpToDate;
-                }
-                _totalEstimatedCost += nodeToBuild.EstimatedCost;
-                nodeToBuild.SetUpdateReason(updateReason);
-                nodeToBuild.State = State.Building;
+                nodeToBuild.State = State.Processing;
                 QueueJob(nodeToBuild);
-                return State.Building;
+                return ProgressState.StillWorking;
             }
 
 
             throw new NotSupportedException();
         }
 
-        private State RecurseIntoDependencies(IEnumerable<Node> dependencies, out int costOfRemainingDependencies)
+        enum ProgressState
         {
-            State allState = State.UpToDate;
+            StillWorking,
+            Ready,
+            Failed
+        }
+
+        private ProgressState RecurseIntoDependencies(IEnumerable<Node> dependencies, out int costOfRemainingDependencies)
+        {
+            List<ProgressState> allState = new List<ProgressState>();
             costOfRemainingDependencies = 0;
+            
             foreach (var dep in dependencies)
             {
                 int cost;
                 State state;
                 //using (TinyProfiler.Section("DoPass "+dep.Name))
-                     state = DoPass(dep, out cost);
-                costOfRemainingDependencies += cost;
 
-                if (state == State.Building)
-                    allState = State.Building;
-                if (state == State.Failed)
-                    return State.Failed;
+                allState.Add(DoPass(dep, out cost));
             }
-            return allState;
+
+            if (allState.Contains(ProgressState.Failed))
+                return ProgressState.Failed;
+            if (allState.All(s => s == ProgressState.Ready))
+                return ProgressState.Ready;
+
+            return ProgressState.StillWorking;
         }
 
         private void QueueJob(Node nodeToBuild)
         {
+            /*
             var generatedFileNode = nodeToBuild as GeneratedFileNode;
             if (_cachingClient.Enabled && generatedFileNode != null && generatedFileNode.SupportsNetworkCache)
             {
                 _cachingClient.Queue(generatedFileNode);
             }
-            else
+            else*/
             {
                 QueueJobNoCaching(nodeToBuild);
             }
@@ -307,11 +327,11 @@ namespace csb2
     public class JobResult
     {
         public Node Node { get; set; }
-        public bool Success { get; set; }
         public PreviousBuildsDatabase.Entry BuildInfo { get; set; }
         public string Source { get; set; }
         public string Output { get; set; }
         public string Input { get; set; }
+        public State ResultState { get; set; }
     }
 }
  

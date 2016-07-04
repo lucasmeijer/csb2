@@ -12,6 +12,7 @@ namespace csb2
         }
 
         public override string NodeTypeIdentifier => "SrcFile";
+        public override bool NeverBuilds => true;
 
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {

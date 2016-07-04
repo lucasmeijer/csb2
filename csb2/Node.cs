@@ -26,6 +26,8 @@ namespace csb2
 
         public Node[] StaticDependencies => _staticDependencies ?? (_staticDependencies = ProvideStaticDependencies().ToArray());
 
+        public virtual bool NeverBuilds => false;
+
         public void SetStaticDependencies(params Node[] deps)
         {
             if (_staticDependencies != null)
@@ -93,6 +95,8 @@ namespace csb2
         StaticDependenciesReady,
         AllDependenciesReady,
         Building,
-        Failed
+        Built,
+        Failed,
+        Processing
     }
 }

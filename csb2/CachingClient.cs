@@ -75,14 +75,14 @@ namespace csb2
         {
             using (TinyProfiler.Section("CacheClient " + job.Name))
             {
-                var inputsHash = job.InputsHash;
+                var inputsSummary = job.InputsSummary;
                 var client = new JsonServiceClient(CachingServer.Url);
 
                 CacheResponse result = new CacheResponse() {Files = new List<FilePayLoad>()};
                 try
                 {
                     using (TinyProfiler.Section("Get " + job.Name))
-                        result = client.Get(new CacheRequest() {Key = inputsHash, Name = job.Name});
+                        result = client.Get(new CacheRequest() {Key = inputsSummary.Hash, Name = job.Name});
                 }
                 catch (WebException)
                 {
@@ -109,11 +109,11 @@ namespace csb2
 
                 var jobResult = new JobResult()
                 {
-                    BuildInfo = new PreviousBuildsDatabase.Entry() {File = job.File.ToString(), InputsHash = inputsHash, TimeStamp = job.File.TimeStamp},
+                    BuildInfo = new PreviousBuildsDatabase.Entry() {File = job.File.ToString(), InputsSummary = inputsSummary, TimeStamp = job.File.TimeStamp},
                     Node = job,
                     Output = result.Output,
                     Source = "Cache",
-                    Success = true
+                    ResultState = State.Built
                 };
                 _builder._completedJobs.Enqueue(jobResult);
                 

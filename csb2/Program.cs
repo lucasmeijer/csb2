@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using csb2.Caching;
 using NiceIO;
 using Unity.TinyProfiling;
@@ -8,42 +9,62 @@ namespace csb2
 {
     class Program
     {
+        private static PreviousBuildsDatabase _previousBuildsDatabase;
+        private static AliasNode _nodeToBuild;
+        private static FileHashProvider _fileHashProvider;
+
         static void Main(string[] args)
         {
             using (TinyProfiler.Section("Root"))
             {
-                TinyProfiler.ConfigureOutput(new NPath("c:/test/profiler.html"), "csb");
+                TinyProfiler.ConfigureOutput(new NPath("c:/test/profiler.svg"), "csb");
                 var projects = new NPath("c:/test/projects");
 
+                /*
                 using (TinyProfiler.Section("Start CacheServer"))
                     new CachingServer().Start(new NPath("c:/test/cache"));
-
+                    */
                 List<CppProgram> cppPrograms;
-                using (TinyProfiler.Section("Setup DepGraph"))
+                
+                var loadDB = Task.Run(() =>
                 {
-           
-                    cppPrograms = new List<CppProgram>();
-                    foreach (var dir in projects.Directories())
+                    using (TinyProfiler.Section("Load Database"))
+                        _previousBuildsDatabase = new PreviousBuildsDatabase(new NPath("c:/test/database"));
+                });
+
+
+                var setupDepgraph = Task.Run(() =>
+                {
+                    using (TinyProfiler.Section("Setup DepGraph"))
                     {
-                        var cppProgram = new CppProgram(dir.FileName, new NPath($"c:/test/out/{dir.FileName}.exe"), dir);
-                        cppPrograms.Add(cppProgram);
+
+                        cppPrograms = new List<CppProgram>();
+                        foreach (var dir in projects.Directories())
+                        {
+                            var cppProgram = new CppProgram(dir.FileName, new NPath($"c:/test/out/{dir.FileName}.exe"), dir);
+                            cppPrograms.Add(cppProgram);
+                        }
+
+                        var unityEditor = new UnityEditor();
+
+                        _nodeToBuild = new AliasNode("all", new[] {unityEditor});
                     }
-                }
+                });
 
-                var unityEditor = new UnityEditor();
+                var loadFileHashProvider = Task.Run(() =>
+                {
+                    _fileHashProvider = new FileHashProvider(new NPath("c:/test/hashdatabase")); 
+                });
 
-                PreviousBuildsDatabase db;
-                using (TinyProfiler.Section("Load Database"))
-                    db = new PreviousBuildsDatabase(new NPath("c:/test/database"));
+                Task.WaitAll(loadDB, setupDepgraph, loadFileHashProvider);
 
-                var aliasNode = new AliasNode("all", new[] { unityEditor });
-                var builder = new Builder(db);
+                var builder = new Builder(_previousBuildsDatabase, _fileHashProvider);
                 using (TinyProfiler.Section("Build"))
-                    builder.Build(aliasNode);
+                    builder.Build(_nodeToBuild);
                 using (TinyProfiler.Section("Save Database"))
                 {
                     Console.WriteLine("Saving Database");
-                    db.Save();
+                    _previousBuildsDatabase.Save();
                 }
                 using (TinyProfiler.Section("Save HashDatabase"))
                 {

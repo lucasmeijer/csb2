@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using NiceIO;
+using Unity.TinyProfiling;
 
 namespace csb2
 {
@@ -8,7 +9,9 @@ namespace csb2
         public UnityEditor() : base("UnityEditor")
         {
             var objectNodes = new ObjectNode[0];
-            objectNodes = JamOutput.GetObjectNodes().ToArray();
+
+            using (TinyProfiler.Section("GetJamOutput"))
+                objectNodes = JamOutput.GetObjectNodes().ToArray();
 
 
             var jamParser = new JamOutputParser();

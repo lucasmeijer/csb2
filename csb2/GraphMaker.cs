@@ -70,11 +70,12 @@ namespace Unity.TinyProfiling
 
 			var sb = new StringBuilder();
 			sb.AppendLine();
-			sb.AppendLine(string.Format(@"<rect class=""func_g"" onmouseover=""s('{4}')"" onmouseout=""c()"" x=""{0}"" y=""{1}"" width=""{2}"" height=""15.0"" fill=""{3}"" rx=""0"" ry=""0"" />", Scale(displaySection.Start).ToString(CultureInfo.InvariantCulture), y, Scale(displaySection.Duration).ToString(CultureInfo.InvariantCulture), _palette.ColorFor(displaySection.Label), Clean(displaySection.Summary)));
+			sb.AppendLine(string.Format($@"<rect class=""func_g"" onmouseover=""s('{Clean(displaySection.Summary)}')"" onmouseout=""c()"" x=""{Scale(displaySection.Start).ToString(CultureInfo.InvariantCulture)}"" y=""{y}"" width=""{Scale(displaySection.Duration).ToString(CultureInfo.InvariantCulture)}"" height=""15.0"" fill=""{_palette.ColorFor(displaySection.Label)}"" rx=""0"" ry=""0"" />"));
 
 			var fontSizeFor = FontSizeFor(displaySection.Duration);
-			if (fontSizeFor > 2)
-				sb.AppendLine(string.Format(@"<text class=""func_text"" text-anchor=""top"" x=""{0}"" y=""{1}"" font-size=""{2}"" font-family=""Verdana"" fill=""rgb(0,0,s0)"">{3}</text>", Scale(displaySection.Start).ToString(CultureInfo.InvariantCulture), y + 13, fontSizeFor.ToString(CultureInfo.InvariantCulture), displaySection.Label));
+		    //fontSizeFor = Math.Max(3, fontSizeFor);
+			//if (fontSizeFor > 5)
+		//		sb.AppendLine(string.Format(@"<text class=""func_text"" text-anchor=""top"" x=""{0}"" y=""{1}"" font-size=""{2}"" font-family=""Verdana"" fill=""rgb(0,0,s0)"">{3}</text>", Scale(displaySection.Start).ToString(CultureInfo.InvariantCulture), y + 13, fontSizeFor.ToString(CultureInfo.InvariantCulture), displaySection.Label));
 			return sb.ToString();
 		}
 
@@ -82,7 +83,8 @@ namespace Unity.TinyProfiling
 		{
 			if (details.Contains("<")) details = details.Replace("<", "");
 			if (details.Contains(">")) details = details.Replace(">", "");
-			return details;
+
+		    return details.Replace("\\", "/");
 		}
 
 		private double FontSizeFor(double duration)
@@ -92,9 +94,9 @@ namespace Unity.TinyProfiling
 			//scale=20  -> fontsize=2
 			//scale=200 -> fontsize=10
 
-			float scaleA = 20f;
-			float fontA = 2f;
-			float scaleB = 200f;
+			float scaleA = 2;
+			float fontA = 5f;
+			float scaleB = 200;
 			float fontB = 10f;
 
 			double f = (units - scaleA) / (scaleB - scaleA);

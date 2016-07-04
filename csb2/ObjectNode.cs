@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using NiceIO;
 using Unity.IL2CPP;
 using Unity.IL2CPP.Building;
@@ -50,8 +48,8 @@ namespace csb2
 
             return new JobResult()
             {
-                BuildInfo = new PreviousBuildsDatabase.Entry() {File = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash},
-                Success = executeResult.ExitCode == 0,
+                BuildInfo = new PreviousBuildsDatabase.Entry() {File = Name, TimeStamp = File.TimeStamp, InputsSummary = InputsSummary},
+                ResultState =  executeResult.ExitCode == 0 ? State.Built : State.Failed,
                 Output = output,
                 Input = fullArgs.Arguments,
                 Node = this
@@ -75,72 +73,28 @@ namespace csb2
 
         private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetInstallation(new Version(10,0)).GetIncludeDirectories();
 
-        protected override PreviousBuildsDatabase.Entry EntryForResultFromCache()
-        {
-            return new PreviousBuildsDatabase.Entry() { File = Name, TimeStamp = File.TimeStamp, InputsHash = InputsHash };
-        }
-
-        IEnumerable<NPath> FindIncludedFiles(NPath file, HashSet<NPath> alreadyProcessed = null )
-        {
-            if (alreadyProcessed == null)
-                alreadyProcessed = new HashSet<NPath>();
-            foreach (var nPath in _parser.FindIncludedFiles(file, _includeDirs, ToolChainIncludeDirectories, alreadyProcessed)) yield return nPath;
-        }
-
-        string[] FindIncludedFilesInPreprocessorOutput(NPath preprocessorOutput)
-        {
-            var regex = new Regex(@"^#line \d+ ""(?<file>.+)""", RegexOptions.Multiline);
-            using (StreamReader reader = new StreamReader(preprocessorOutput.ToString()))
-            {
-                var all = reader.ReadToEnd();
-                var matches = regex.Matches(all);
-                var result = new SortedSet<string>();
-
-                foreach (Match match in matches)
-                {
-                    var value = match.Groups["file"].Value;
-                    if (!value.Contains("Microsoft Visual Studio") && !value.Contains("Windows Kits"))
-                        result.Add(value);
-                }
-                return result.ToArray();
-            }
-        }
-
 
         public override bool SupportsNetworkCache => true;
 
         private string _inputsHash = null;
         private static IncludeParser _parser = new IncludeParser();
 
-        public override string InputsHash
+        protected override InputsSumary CalculateInputsSummary()
         {
-            get
+            using (TinyProfiler.Section("CalculateInputsHash " + _cppFile.File))
             {
-                if (_inputsHash != null)
-                    return _inputsHash;
+                var includeFiles = _parser.FindIncludedFiles(_cppFile.File, _includeDirs);
 
-                _inputsHash = CalculateInputsHash();
-                return _inputsHash;
-            }
-        }
-
-        private string CalculateInputsHash()
-        {
-            using (TinyProfiler.Section("CalculateInputsHash "+_cppFile.File))
-            {
-                var includeFiles = FindIncludedFiles(_cppFile.File);
-                var sb = new StringBuilder(FileHashProvider.Instance.HashFor(_cppFile.File));
-
-                foreach (var includeFile in includeFiles)
+                var dependentfiles = includeFiles.Concat(new[] {_cppFile.File});
+                return new InputsSumary()
                 {
-                    sb.Append(includeFile.FileName);
-                    sb.Append(FileHashProvider.Instance.HashFor(includeFile));
-                }
-                return Hashing.CalculateHash(sb.ToString());
+                    TargetFileName = File.ToString(),
+                    CommandLine = DefineAndFlagArguments(),
+                    Dependencies = dependentfiles.Select(o => new FileSummary() {FileName = o.ToString(), Hash = FileHashProvider.Instance.HashFor(o), TimeStamp = o.TimeStamp}).ToArray()
+                };
             }
         }
 
-        public ObjectNode[] ObjectNodes => new[] {this};
         public override string NodeTypeIdentifier => "Obj";
     }
 

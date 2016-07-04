@@ -7,34 +7,27 @@ namespace csb2
 {
     public abstract class GeneratedFileNode : FileNode
     {
+        private InputsSumary _inputsSummary;
+
         protected GeneratedFileNode(NPath file) : base(file)
         {
         }
 
-        public void Process()
-        {
-            CalculateInputHash();
-
-            //Check option against PreviousDatabase
-            //if match -> state = UpToDate, return.
-
-            //if caching-read-enabled
-            //queue with CacheClientThread & return
-
-            //if distribution enabled && availablity
-            //  queue with distribution thread & return
-            
-            //build right here
-        }
-
-        private void CalculateInputHash()
-        {
-            throw new NotImplementedException();
-        }
-
+       
 
         public virtual bool SupportsNetworkCache => false;
-        public abstract string InputsHash { get; }
+
+        public InputsSumary InputsSummary
+        {
+            get
+            {
+                if (_inputsSummary != null)
+                    return _inputsSummary;
+
+                _inputsSummary = CalculateInputsSummary();
+                return _inputsSummary;
+            }
+        }
 
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
@@ -50,27 +43,23 @@ namespace csb2
 
             if (file.TimeStamp != e.TimeStamp)
                 return new UpdateReason($"Previous build that we made had a timestamp of {e.TimeStamp}, but the generated file on disk has a timestamp of {file.TimeStamp}");
-  
-            if (e.InputsHash != InputsHash)
-                return new UpdateReason("CacheKey of potentially recyclable object is different from current one");
-  
-            return null;
+
+            string difference;
+            if (e.InputsSummary.Matches(InputsSummary, out difference))
+                return null;
+                
+           // Console.WriteLine("difference: "+difference);
+            return new UpdateReason(difference);
         }
 
         public sealed override JobResult Build()
         {
             File.Parent.EnsureDirectoryExists();
 
-            var jobResult = BuildGeneratedFile();
-            if (!jobResult.Success)
-                return jobResult;
-
-            PreviousBuildsDatabase.Instance.SetInfoFor(jobResult.BuildInfo);
+            return  BuildGeneratedFile();
             
 //            if (SupportsNetworkCache)
   //              CachingClient.Store(InputsHash, File, jobResult.Output);
-
-            return jobResult;
         }
         
         protected virtual PreviousBuildsDatabase.Entry EntryForResultFromCache()
@@ -80,5 +69,7 @@ namespace csb2
 
         protected abstract JobResult BuildGeneratedFile();
 
+        protected abstract InputsSumary CalculateInputsSummary();
     }
+
 }

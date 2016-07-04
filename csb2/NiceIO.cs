@@ -725,7 +725,11 @@ namespace NiceIO
 		{
 			return self.Select(p => p.InQuotes(forward));
 		}
-        
+
+        public static IEnumerable<string> InQuotes(this IEnumerable<string> self)
+        {
+            return self.Select(p => $"\"{p}\"");
+        }
         public static string SeperateWithSpace(this IEnumerable<string> self)
 	    {
 	        var sb = new StringBuilder();

@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using NiceIO;
 using ProtoBuf;
+using ServiceStack;
 
 namespace csb2
 {
@@ -53,9 +55,9 @@ namespace csb2
             [ProtoMember(2)]
             public DateTime TimeStamp;
             [ProtoMember(3)]
-            public string InputsHash;
+            public InputsSumary InputsSummary;
         }
-
+        
         public bool TryGetInfoFor(string file, out Entry result)
         {
             return _entries.TryGetValue(file, out result);
@@ -65,5 +67,95 @@ namespace csb2
         {
             _entries[entry.File] = entry;
         }
+    }
+
+    [ProtoContract]
+    public class InputsSumary
+    {
+        [ProtoMember(1)]
+        public string TargetFileName;
+        [ProtoMember(2)]
+        public string CommandLine;
+        [ProtoMember(3)]
+        public FileSummary[] Dependencies;
+
+        public string Hash
+        {
+            get
+            {
+                var sb = new StringBuilder(TargetFileName);
+                sb.Append(CommandLine);
+                foreach (var dep in Dependencies)
+                {
+                    sb.Append(dep.FileName);
+                    sb.Append(dep.Hash);
+                }
+                return sb.ToString();
+            }
+        }
+
+        public bool Matches(InputsSumary newSummary, out string difference)
+        {
+            if (newSummary.TargetFileName != TargetFileName)
+            {
+                difference = $"New summary's TargetFileName is {newSummary.TargetFileName} but old one is {TargetFileName}";
+                return false;
+            }
+
+            if (newSummary.CommandLine != CommandLine)
+            {
+                difference = $"New summary's CommandLine is {newSummary.CommandLine} but old one is {CommandLine}";
+                return false;
+            }
+
+            if (newSummary.Dependencies.Length != Dependencies.Length)
+            {
+                difference = $"New summary has {newSummary.Dependencies.Length} dependencies, but old one has {Dependencies.Length}";
+                difference += "\nNewDeps:\n";
+                foreach (var dep in newSummary.Dependencies)
+                    difference += dep.FileName + "\n";
+
+                difference += "\n\nOldDeps:\n";
+                foreach (var dep in Dependencies)
+                    difference += dep.FileName + "\n";
+
+                return false;
+            }
+
+            for (int i = 0; i != newSummary.Dependencies.Length; i++)
+            {
+                var old = Dependencies[i];
+                var newer = newSummary.Dependencies[i];
+
+                if (old.FileName != newer.FileName)
+                {
+                    difference = $"Dependency {i} in new summary has filename {newer.FileName}, but old one has {old.FileName}";
+                    return false;
+                }
+                if (old.TimeStamp != newer.TimeStamp)
+                {
+                    difference = $"Dependency {newer.FileName} in new summary has timestamp {newer.TimeStamp}, but old one has {old.TimeStamp}";
+                    return false;
+                }
+                if (old.Hash != newer.Hash)
+                {
+                    difference = $"Dependency {newer.FileName} in new summary has hash {newer.Hash}, but old one has {old.Hash}";
+                    return false;
+                }
+            }
+            difference = "";
+            return true;
+        }
+    }
+
+    [ProtoContract]
+    public class FileSummary
+    {
+        [ProtoMember(1)]
+        public string FileName;
+        [ProtoMember(2)]
+        public DateTime TimeStamp;
+        [ProtoMember(3)]
+        public string Hash;
     }
 }
