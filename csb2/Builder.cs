@@ -15,7 +15,7 @@ namespace csb2
     class Builder
     {
         private readonly PreviousBuildsDatabase _previousBuildsDatabase;
-        private readonly Queue<Node> m_Jobs = new Queue<Node>();
+        private readonly ConcurrentQueue<Node> m_Jobs = new ConcurrentQueue<Node>();
         
         public FileHashProvider FileHashProvider { get; } 
 
@@ -28,7 +28,7 @@ namespace csb2
 
 
         public bool _workerThreadsShouldExit = false;
-        private readonly object _jobsMutex = new object();
+
 
         public bool _quit = false;
         private CachingClient _cachingClient;
@@ -57,9 +57,8 @@ namespace csb2
                 workerThreads.Add(thread);
             }
            
-            //_cachingClient = new CachingClient(this);
-            //_cachingClient.Enabled = false;
-
+            _cachingClient = new CachingClient(this);
+            
             while (true)
             {
                 int costRemaining;
@@ -67,7 +66,7 @@ namespace csb2
                 int i = 0;
                 using (TinyProfiler.Section("DoPass"+i))
                     state = DoPass(nodeToBuild, out costRemaining);
-                if (state == ProgressState.Failed || state == ProgressState.Ready || _quit)
+                if ((state == ProgressState.Failed || state == ProgressState.Ready) && !m_Jobs.Any())
                 {
                     i++;
                     _workerThreadsShouldExit = true;
@@ -146,36 +145,65 @@ namespace csb2
                 while (true)
                 {
                     Node job = null;
-                    lock (_jobsMutex)
-                    {
-                        if (m_Jobs.Count == 0)
-                            break;
 
-                        job = m_Jobs.Dequeue();
-                    }
+                    if (!m_Jobs.TryDequeue(out job))
+                        break;
 
                     UpdateReason updateReason;
                     var nodeToBuild = job;
-                    using (TinyProfiler.Section("DetermineNeedToBuild",nodeToBuild.Name))
-                        updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
-                    if (updateReason == null)
+
+
+                    switch (nodeToBuild.State)
                     {
-                        _completedJobs.Enqueue(new JobResult() {ResultState = State.UpToDate, Node = nodeToBuild});
+                        case State.Processing:
+                            using (TinyProfiler.Section("DetermineNeedToBuild", nodeToBuild.Name))
+                                updateReason = nodeToBuild.DetermineNeedToBuild(_previousBuildsDatabase);
+                            if (updateReason == null)
+                            {
+                                var jobResult = new JobResult() {ResultState = State.UpToDate, Node = nodeToBuild};
+                                CompletedJob(jobResult);
+                            }
+                            else
+                            {
+                                nodeToBuild.SetUpdateReason(updateReason);
+                                var generatedFileNode = nodeToBuild as GeneratedFileNode;
+                                if (generatedFileNode != null && generatedFileNode.SupportsNetworkCache && CachingClient.Enabled)
+                                {
+                                    //calculate summary on workerthread;
+                                    var summary = generatedFileNode.InputsSummary;
+                                    _cachingClient.Queue(generatedFileNode);
+                                }
+                                else
+                                    BuildNode(nodeToBuild, job, workedThreadIndex);
+                            }
+                            break;
+                        case State.CacheLoadFailed:
+                            BuildNode(nodeToBuild, job, workedThreadIndex);
+                            break;
+                        default:
+                            throw new InvalidOperationException();
                     }
-                    else
-                    {
-                        nodeToBuild.SetUpdateReason(updateReason);
-                        nodeToBuild.State = State.Building;
-                        using (TinyProfiler.Section("Build",job.Name))
-                        {
-                            var jobResult = job.Build();
-                            jobResult.Source = "Local" + workedThreadIndex;
-                            _completedJobs.Enqueue(jobResult);
-                        }
-                    }
-                    _mainThreadEvent.Set();
+
+
                 }
             }    
+        }
+
+        public void CompletedJob(JobResult jobResult)
+        {
+            _completedJobs.Enqueue(jobResult);
+            _mainThreadEvent.Set();
+        }
+
+        private void BuildNode(Node nodeToBuild, Node job, int workedThreadIndex)
+        {
+            nodeToBuild.State = State.Building;
+            using (TinyProfiler.Section("Build", job.Name))
+            {
+                var jobResult = job.Build();
+                jobResult.Source = "Local" + workedThreadIndex;
+                CompletedJob(jobResult);
+            }
         }
 
         public void LogJobResult(JobResult jobResult)
@@ -226,6 +254,7 @@ namespace csb2
 
                 case State.Building:
                 case State.Processing:
+                case State.CacheLoadFailed:
                     return ProgressState.StillWorking;
                 case State.Failed:
                     return ProgressState.Failed;
@@ -302,24 +331,9 @@ namespace csb2
             return ProgressState.StillWorking;
         }
 
-        private void QueueJob(Node nodeToBuild)
+        public void QueueJob(Node nodeToBuild)
         {
-            /*
-            var generatedFileNode = nodeToBuild as GeneratedFileNode;
-            if (_cachingClient.Enabled && generatedFileNode != null && generatedFileNode.SupportsNetworkCache)
-            {
-                _cachingClient.Queue(generatedFileNode);
-            }
-            else*/
-            {
-                QueueJobNoCaching(nodeToBuild);
-            }
-        }
-
-        public void QueueJobNoCaching(Node nodeToBuild)
-        {
-            lock (_jobsMutex)
-                m_Jobs.Enqueue(nodeToBuild);
+            m_Jobs.Enqueue(nodeToBuild);
             _workedThreadsEvent.Set();
         }
     }

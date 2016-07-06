@@ -626,6 +626,8 @@ namespace NiceIO
 	        }
 	    }
 
+	    public Int64 FileSize => new FileInfo(ToString()).Length;
+
 	    public NPath WriteAllText(string contents)
 		{
 			ThrowIfRelative();

@@ -59,10 +59,10 @@ namespace csb2.Caching
             
             public object Any(CacheRequest request)
             {
-                using (TinyProfiler.Section("CacheServer " + request.Name))
+                //using (TinyProfiler.Section("CacheServer " + request.Name))
                 {
                     var result = new CacheResponse();
-                    var cacheEntryDir = _cachePath.Combine(request.Key);
+                    var cacheEntryDir = CacheEntryDirFor(request.Key);
                     if (!cacheEntryDir.DirectoryExists())
                         return result;
 
@@ -73,12 +73,17 @@ namespace csb2.Caching
                 }
             }
 
+            private static NPath CacheEntryDirFor(string key)
+            {
+                return _cachePath.Combine(key.Substring(0,3), key);
+            }
+
             public object Any(CacheStore storeRequest)
             {
-                using (TinyProfiler.Section("CacheServerStore " + storeRequest.Name))
+                //using (TinyProfiler.Section("CacheServerStore " + storeRequest.Name))
                 {
-                    var cacheEntryDir = _cachePath.Combine(storeRequest.Key);
-                    if (cacheEntryDir.Exists())
+                    var cacheEntryDir = CacheEntryDirFor(storeRequest.Key);
+                    if (cacheEntryDir.Exists()) 
                     {
                         Console.WriteLine("Getting a store request that we already have. very fishy! "+storeRequest.Name);
                         return null;

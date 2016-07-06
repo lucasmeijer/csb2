@@ -90,7 +90,7 @@ namespace csb2
                     sb.Append(dep.FileName);
                     sb.Append(dep.Hash);
                 }
-                return sb.ToString();
+                return Hashing.CalculateHash(sb.ToString());
             }
         }
 
@@ -107,6 +107,9 @@ namespace csb2
                 difference = $"New summary's CommandLine is {newSummary.CommandLine} but old one is {CommandLine}";
                 return false;
             }
+
+            newSummary.Dependencies = newSummary.Dependencies ?? new FileSummary[0];
+            Dependencies = Dependencies ?? new FileSummary[0];
 
             if (newSummary.Dependencies.Length != Dependencies.Length)
             {

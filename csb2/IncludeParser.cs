@@ -95,17 +95,24 @@ namespace csb2
         }
 
         private readonly ConcurrentDictionary<string, NPath[]> _directlyIncludedFilesCache = new ConcurrentDictionary<string, NPath[]>();
-
+        private static int hit = 0;
         NPath[] FindDirectlyIncludedFiles(NPath file, NPath[] includeDirectories, string cacheKey)
         {
             NPath[] result;
-            if (_directlyIncludedFilesCache.TryGetValue(cacheKey, out result))
+            var key = file.ToString()+cacheKey;
+            
+            if (_directlyIncludedFilesCache.TryGetValue(key, out result))
+            {
+                Console.WriteLine("Hit"+hit++);
                 return result;
-
+            }
             var headerNames = Parse(file);
 
             result = headerNames.Select(headerName => Resolve(headerName, file.Parent, includeDirectories)).Where(includedFile => includedFile != null && !includedFile.ToString().Contains("Program Files")).ToArray();
-            _directlyIncludedFilesCache.TryAdd(cacheKey, result);
+
+            if (!_directlyIncludedFilesCache.TryAdd(key, result))
+                Console.WriteLine("Failed add");
+
             return result;
         }
     }

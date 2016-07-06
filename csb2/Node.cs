@@ -38,6 +38,7 @@ namespace csb2
         public IEnumerable<Node> AllDependencies => _staticDependencies.Concat(_dynamicDependencies);
         public abstract string NodeTypeIdentifier { get; }
         public int EstimatedCost => 1;
+        public virtual bool SupportsNetworkCache => false;
 
         protected Node(string name)
         {
@@ -59,6 +60,8 @@ namespace csb2
         {
             return Name;
         }
+
+       
 
         public void SetUpdateReason(UpdateReason updateReason)
         {
@@ -97,6 +100,7 @@ namespace csb2
         Building,
         Built,
         Failed,
-        Processing
+        Processing,
+        CacheLoadFailed
     }
 }

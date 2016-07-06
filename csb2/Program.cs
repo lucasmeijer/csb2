@@ -20,10 +20,11 @@ namespace csb2
                 TinyProfiler.ConfigureOutput(new NPath("c:/test/profiler.svg"), "csb");
                 var projects = new NPath("c:/test/projects");
 
-                /*
-                using (TinyProfiler.Section("Start CacheServer"))
-                    new CachingServer().Start(new NPath("c:/test/cache"));
-                    */
+                var startCacheServer = Task.Run(() =>
+                {
+                    using (TinyProfiler.Section("Start CacheServer"))
+                        new CachingServer().Start(new NPath("c:/test/cache"));
+                });
                 List<CppProgram> cppPrograms;
                 
                 var loadDB = Task.Run(() =>
@@ -37,7 +38,6 @@ namespace csb2
                 {
                     using (TinyProfiler.Section("Setup DepGraph"))
                     {
-
                         cppPrograms = new List<CppProgram>();
                         foreach (var dir in projects.Directories())
                         {
@@ -56,7 +56,7 @@ namespace csb2
                     _fileHashProvider = new FileHashProvider(new NPath("c:/test/hashdatabase")); 
                 });
 
-                Task.WaitAll(loadDB, setupDepgraph, loadFileHashProvider);
+                Task.WaitAll(loadDB, setupDepgraph, loadFileHashProvider, startCacheServer);
 
                 var builder = new Builder(_previousBuildsDatabase, _fileHashProvider);
                 using (TinyProfiler.Section("Build"))

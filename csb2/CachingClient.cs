@@ -27,7 +27,7 @@ namespace csb2
             cacheThread.Start();
         }
 
-        public bool Enabled { get; set; } = true;
+        public static bool Enabled { get; set; } = false;
 
 
         public void Queue(GeneratedFileNode node)
@@ -65,6 +65,7 @@ namespace csb2
                         if (m_CacheJobs.Count == 0)
                             break;
                         job = m_CacheJobs.Dequeue();
+                       
                     }
                     Task.Run(() => HandleCacheJob(job));
                 }
@@ -96,8 +97,9 @@ namespace csb2
 
                 if (result.Files.Count == 0)
                 {
+                    job.State = State.CacheLoadFailed;
                     //result did not exist in the cacheserver
-                    _builder.QueueJobNoCaching(job);
+                    _builder.QueueJob(job);
                     return;
                 }
 
@@ -107,17 +109,14 @@ namespace csb2
 
                 job.File.WriteAllBytes(filePayLoad.Content);
 
-                var jobResult = new JobResult()
+                _builder.CompletedJob(new JobResult()
                 {
                     BuildInfo = new PreviousBuildsDatabase.Entry() {File = job.File.ToString(), InputsSummary = inputsSummary, TimeStamp = job.File.TimeStamp},
                     Node = job,
                     Output = result.Output,
                     Source = "Cache",
                     ResultState = State.Built
-                };
-                _builder._completedJobs.Enqueue(jobResult);
-                
-                _builder._mainThreadEvent.Set();
+                });
             }
         }
 
@@ -130,18 +129,25 @@ namespace csb2
                 jobs = m_CacheJobs.ToArray();
                 m_CacheJobs.Clear();
             }
-            
+
             foreach (var job in jobs)
-                _builder.QueueJobNoCaching(job);
+            {
+                job.State=State.CacheLoadFailed;
+                _builder.QueueJob(job);
+            }
         }
 
         public static void Store(string networkCacheKey, NPath file, string output)
         {
+            if (file.FileSize > 15*1024*1024)
+                return;
+
             var bytes = file.ReadAllBytes();
             Task.Run(() =>
             {
                 var cacheStore = new CacheStore() {Key = networkCacheKey, Name = file.FileName, Output = output, Files = new List<FilePayLoad>() {new FilePayLoad() {Name = file.FileName, Content = bytes}}};
-                new JsonServiceClient(CachingServer.Url).Post(cacheStore);
+                var jsonServiceClient = new JsonServiceClient(CachingServer.Url) {Timeout = TimeSpan.FromSeconds(20)};
+                jsonServiceClient.Post(cacheStore);
             });
         }
     }

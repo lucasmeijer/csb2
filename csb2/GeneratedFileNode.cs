@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using NiceIO;
 using Unity.TinyProfiling;
 
@@ -13,9 +14,6 @@ namespace csb2
         {
         }
 
-       
-
-        public virtual bool SupportsNetworkCache => false;
 
         public InputsSumary InputsSummary
         {
@@ -56,10 +54,12 @@ namespace csb2
         {
             File.Parent.EnsureDirectoryExists();
 
-            return  BuildGeneratedFile();
-            
-//            if (SupportsNetworkCache)
-  //              CachingClient.Store(InputsHash, File, jobResult.Output);
+            var jobResult = BuildGeneratedFile();
+
+            if (SupportsNetworkCache && jobResult.ResultState == State.Built && CachingClient.Enabled)
+                CachingClient.Store(InputsSummary.Hash, File, jobResult.Output);
+
+            return jobResult;
         }
         
         protected virtual PreviousBuildsDatabase.Entry EntryForResultFromCache()

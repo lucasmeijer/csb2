@@ -1,5 +1,9 @@
-﻿using System.Linq;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using NiceIO;
+using ServiceStack.Text;
 using Unity.TinyProfiling;
 
 namespace csb2
@@ -77,11 +81,74 @@ namespace csb2
                 "C:/unity2/build/Extensions/win64-debug/Infrastructure/EditorExtensionRegistrarLib.debug.lib C:/unity2/artifacts/linkeroutput/win64_debug_libwebsockets_mono_1/libwebsockets.lib C:/unity2/artifacts/linkeroutput/win64_debug_zlib_mono_1/zlib.lib C:/unity2/artifacts/linkeroutput/win64_debug_libpng_mono_1/libpng.lib C:/unity2/artifacts/linkeroutput/win64_debug_libjpeg_mono_1/libjpeg.lib C:/unity2/artifacts/linkeroutput/win64_debug_zlib_mono_1/zlib.lib C:/unity2/artifacts/linkeroutput/win64_debug_UnitTest++_mono_1/UnitTest++.lib C:/unity2/artifacts/linkeroutput/win64_debug_EditorCrashHandlerLib_mono_1/EditorCrashHandlerLib.lib C:/unity2/artifacts/linkeroutput/win64_debug_UnityYAMLMergeLib_mono_1/UnityYAMLMergeLib.lib C:/unity2/artifacts/linkeroutput/win64_debug_udis86lib_mono_1/udis86lib.lib C:/unity2/artifacts/linkeroutput/win64_debug_pogostubslib_mono_1/pogostubslib.lib C:/unity2/artifacts/linkeroutput/win64_debug_pubnub_mono_1/pubnub.lib C:/unity2/artifacts/linkeroutput/win64_debug_libcrunch_mono_1/libcrunch.lib C:/unity2/artifacts/linkeroutput/win64_debug_UnityAsmUtilsLib_mono_1/UnityAsmUtilsLib.lib";
 
             var allLibs = libs.Concat(more.Split(' '));
-            var exeNode = new ExeNode(new NPath("c:/unity2/build/WindowsEditor/Unity.exe"), objectNodes, allLibs.Distinct().Select(i => new NPath(i)).ToArray(), new[] { "/INCREMENTAL","/DEBUG","/MACHINE:X64","/PDB:C:/unity2/build/WindowsEditor/Unity_x64_d.pdb","/PDBSTRIPPED:C:/unity2/build/WindowsEditor/Unity_x64_d_s.pdb","/stack:2097152","/NXCOMPAT:NO","/MANIFEST:NO","/DYNAMICBASE:NO","/NOLOGO","/LARGEADDRESSAWARE","/NODEFAULTLIB:LIBDECIMAL","/NODEFAULTLIB:LIBCMT","/NODEFAULTLIB:LIBCMTD","/NODEFAULTLIB:LIBC","/NODEFAULTLIB:MSVCRT","/SUBSYSTEM:WINDOWS" });
+            var exeFile = new NPath("c:/unity2/build/WindowsEditor/Unity.exe");
+            var staticLibs = allLibs.Distinct().Select(i => new NPath(i)).ToArray();
+            var linkFlags = new[] { "/INCREMENTAL","/DEBUG","/MACHINE:X64","/PDB:C:/unity2/build/WindowsEditor/Unity_x64_d.pdb","/PDBSTRIPPED:C:/unity2/build/WindowsEditor/Unity_x64_d_s.pdb","/stack:2097152","/NXCOMPAT:NO","/MANIFEST:NO","/DYNAMICBASE:NO","/NOLOGO","/LARGEADDRESSAWARE","/NODEFAULTLIB:LIBDECIMAL","/NODEFAULTLIB:LIBCMT","/NODEFAULTLIB:LIBCMTD","/NODEFAULTLIB:LIBC","/NODEFAULTLIB:MSVCRT","/SUBSYSTEM:WINDOWS" };
+
+
+            var lumpObjects = LumpObjectsFor(objectNodes).ToArray();
+            
+            var exeNode = new ExeNode(exeFile, lumpObjects, staticLibs, linkFlags);
 
             SetStaticDependencies(exeNode);
         }
 
+        private IEnumerable<ObjectNode> LumpObjectsFor(ObjectNode[] objectNodes)
+        {
+            var blacklist = new[]
+            {
+                "PluginInterface", "LzmaCompressor", "Murmur", "ShaderUpgraderTest", "lz4", "vp8", "RestService", "vpx", "UndoBindings", "vrpn", "EditorBuildSettings", "SurfaceObserver", "UnityConnect","PhotoCapture","TextGenerator",
+                "AnnotationManager", "SpatialSurface","AssetProgressbar","ColorByVelocity", "ColorModule","Speech","BuildInfoEvent","EditorModules","Importer.obj","BugReportingTools","WorldAnchorDeserialization","TextRenderingModule","CrashReporting","EnlightenPrecomp","yaml","RepaintController",
+                "SystemInfo","wow64","UsbDevices","CachingManager","ShaderUpgraderUtils","CollabTests","Metrics","GizmoUtil","PlatformDependent\\Win","FloatStringConversion","Collab\\Tests","ImageOperations","TextureImporting","Mesh3DS","LicenseActivation","Platform\\Windows","EditorSettings",
+
+                "ProjectVersion","EditorUserSettings","MenuController","ManagerBackup","PolygonEditor","GUIViewBindings"
+            };
+
+            var split = objectNodes.GroupBy(o => blacklist.Any(o.ToString().Contains));
+
+
+
+
+            var blackListedObjects = split.Single(kvp => kvp.Key == true).ToArray();
+            var whiteListedObjects = split.Single(kvp => kvp.Key == false).ToArray();
+            foreach (var bl in blackListedObjects)
+                yield return bl;
+
+            var directoryGroupings = whiteListedObjects.GroupBy(o => o.CppFile.File.Parent);
+
+            int lumps = 0;
+            foreach (var directoryGrouping in directoryGroupings)
+            {   
+                var relativeDirectory = directoryGrouping.Key.RelativeTo(new NPath("c:/unity2"));
+
+                var compilerSettingGroupings = directoryGrouping.GroupBy(o => o.Defines.ConcatAll() + o.Flags.ConcatAll() + o.IncludeDirs.ConcatAll());
+
+                var lumpsDir = new NPath("c:/unity2/artifacts/lumps");
+
+                int count = 0;
+                foreach (var compilerSettingGroup in compilerSettingGroupings)
+                {
+                    var firstObjectFile = compilerSettingGroup.First();
+                    if (compilerSettingGroup.Count() == 1)
+                    {
+                        yield return firstObjectFile;
+                        continue;
+                    }
+
+                    var lumpSourceFilePath = lumpsDir.Combine(relativeDirectory+count.ToString()).ChangeExtension("cpp");
+                    var lumpSourceFile = new LumpSourceFile(compilerSettingGroup.Select(g => g.CppFile), lumpSourceFilePath);
+                    var lumpNode = new ObjectNode(lumpSourceFile, lumpSourceFilePath.ChangeExtension("obj"), firstObjectFile.IncludeDirs, firstObjectFile.Defines, firstObjectFile.Flags);
+                    yield return lumpNode;
+                    count++;
+                    lumps++;
+                }
+            }
+
+
+            Console.WriteLine($"BlackListed: {blackListedObjects.Length}  WhiteListed: {whiteListedObjects.Length} Lumps:{lumps}");
+        }
+
+       
         public override string NodeTypeIdentifier => "CppProgram";
     }
 }

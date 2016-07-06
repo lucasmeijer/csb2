@@ -12,18 +12,18 @@ namespace csb2
 {
     public class ObjectNode : GeneratedFileNode
     {
-        private readonly FileNode _cppFile;
-        private readonly NPath[] _includeDirs;
-        private readonly string[] _defines;
-        private readonly string[] _flags;
+        public FileNode CppFile { get; }
+        public NPath[] IncludeDirs { get; }
+        public string[] Defines { get; }
+        public string[] Flags { get; }
 
         public ObjectNode(FileNode cppFile, NPath objectFile, NPath[] includeDirs, string[] defines, string[] flags) : base(objectFile)
         {
-            _cppFile = cppFile;
-            _includeDirs = includeDirs;
-            _defines = defines;
-            _flags = flags;
-            SetStaticDependencies(_cppFile);
+            CppFile = cppFile;
+            IncludeDirs = includeDirs;
+            Defines = defines;
+            Flags = flags;
+            SetStaticDependencies(CppFile);
         }
 
         protected override JobResult BuildGeneratedFile()
@@ -35,15 +35,15 @@ namespace csb2
 
             var cl = MsvcInstallation.GetInstallation(new Version(10, 0)).GetVSToolPath(new x64Architecture(), "cl.exe").ToString();
 
-            var fullArgs = new Shell.ExecuteArgs {Arguments = includeArguments + " " + DefineAndFlagArguments() + " /nologo /Fo" + File.InQuotes(SlashMode.Forward) + " " + _cppFile.File.InQuotes(SlashMode.Forward), Executable = cl};
+            var fullArgs = new Shell.ExecuteArgs {Arguments = includeArguments + " " + DefineAndFlagArguments() + " /nologo /Fo" + File.InQuotes(SlashMode.Forward) + " " + CppFile.File.InQuotes(SlashMode.Forward), Executable = cl};
 
             Shell.ExecuteResult executeResult;
-            using (TinyProfiler.Section("CompileFull " + _cppFile.File))
+            using (TinyProfiler.Section("CompileFull " + CppFile.File))
                 executeResult = Shell.Execute(fullArgs);
 
             var output = executeResult.StdOut + executeResult.StdErr;
 
-            if (output.StartsWith(_cppFile.File.FileName))
+            if (output.StartsWith(CppFile.File.FileName))
                 output = output.Substring(File.FileName.Length).Trim();
 
             return new JobResult()
@@ -61,15 +61,15 @@ namespace csb2
         {
             var sb = new StringBuilder();
 
-            foreach (var define in _defines)
+            foreach (var define in Defines)
                 sb.Append("-D" + define+" ");
-            foreach (var flag in _flags)
+            foreach (var flag in Flags)
                 sb.Append(flag + " ");
             sb.Append(" /c ");
             return sb.ToString();
         }
 
-        private IEnumerable<NPath> AllIncludeDirectories => _includeDirs.Concat(ToolChainIncludeDirectories);
+        private IEnumerable<NPath> AllIncludeDirectories => IncludeDirs.Concat(ToolChainIncludeDirectories);
 
         private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetInstallation(new Version(10,0)).GetIncludeDirectories();
 
@@ -81,11 +81,11 @@ namespace csb2
 
         protected override InputsSumary CalculateInputsSummary()
         {
-            using (TinyProfiler.Section("CalculateInputsHash " + _cppFile.File))
+            using (TinyProfiler.Section("CalculateInputsHash " + CppFile.File))
             {
-                var includeFiles = _parser.FindIncludedFiles(_cppFile.File, _includeDirs);
+                var includeFiles = _parser.FindIncludedFiles(CppFile.File, IncludeDirs).ToArray();
 
-                var dependentfiles = includeFiles.Concat(new[] {_cppFile.File});
+                var dependentfiles = includeFiles.Concat(new[] {CppFile.File});
                 return new InputsSumary()
                 {
                     TargetFileName = File.ToString(),
@@ -96,6 +96,11 @@ namespace csb2
         }
 
         public override string NodeTypeIdentifier => "Obj";
+
+        public override IEnumerable<Node> ProvideStaticDependencies()
+        {
+            yield return CppFile;
+        }
     }
 
 

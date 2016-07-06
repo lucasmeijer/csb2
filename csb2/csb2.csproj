@@ -84,6 +84,7 @@
     <Compile Include="CachingClient.cs" />
     <Compile Include="CppProgram.cs" />
     <Compile Include="ExeNode.cs" />
+    <Compile Include="Extensions.cs" />
     <Compile Include="FileNode.cs" />
     <Compile Include="GeneratedFileNode.cs" />
     <Compile Include="GraphMaker.cs" />
@@ -91,6 +92,7 @@
     <Compile Include="IncludeParser.cs" />
     <Compile Include="JamOutput.cs" />
     <Compile Include="JamOutputParser.cs" />
+    <Compile Include="LumpSourceFile.cs" />
     <Compile Include="Palette.cs" />
     <Compile Include="SourceFileNode.cs" />
     <Compile Include="Msvc10Installation.cs" />
