@@ -18,8 +18,7 @@ namespace csb2
         {
             using (TinyProfiler.Section("Root"))
             {
-                TinyProfiler.ConfigureOutput(new NPath("c:/test/profiler.svg"), "csb");
-                var projects = new NPath("c:/test/projects");
+				TinyProfiler.ConfigureOutput(NPath.CurrentDirectory.Combine("profiler.svg"), "csb");
                 
                 bool runCacheServer = false;
                 CacheMode cacheMode = CacheMode.None;
@@ -29,7 +28,11 @@ namespace csb2
                 var options = new OptionSet
                 {
                     {"runCacheServer", "Run a cache server", v => runCacheServer = v != null},
-                    {"cacheDirectory", "Directory for the cacheserver to store its cache", s => cacheDirectory = new NPath(s) },
+					{"cacheDirectory=", "Directory for the cacheserver to store its cache", s => {
+							Console.WriteLine(s);
+							cacheDirectory = new NPath(s);
+							Console.WriteLine(cacheDirectory);
+						}},
                     {
                         "cacheMode", "Sets cachemode. valid options: r,w,rw,n", (v) =>
                         {
@@ -58,17 +61,17 @@ namespace csb2
 
                 CachingClient.CacheMode = cacheMode;
 
+				Console.WriteLine("CacheDirectory: "+cacheDirectory);
+
                 if (runCacheServer)
                 {
                         using (TinyProfiler.Section("Start CacheServer"))
                             new CachingServer().Start(cacheDirectory);
 
                         while(true)
-                            System.Threading.Thread.Sleep(TimeSpan.FromDays(100));
+                            System.Threading.Thread.Sleep(TimeSpan.FromHours(1));
                 }
-
-                List<CppProgram> cppPrograms;
-                
+					                
                 var loadDB = Task.Run(() =>
                 {
                     using (TinyProfiler.Section("Load Database"))
@@ -80,12 +83,6 @@ namespace csb2
                 {
                     using (TinyProfiler.Section("Setup DepGraph"))
                     {
-                        cppPrograms = new List<CppProgram>();
-                        foreach (var dir in projects.Directories())
-                        {
-                            var cppProgram = new CppProgram(dir.FileName, new NPath($"c:/test/out/{dir.FileName}.exe"), dir);
-                            cppPrograms.Add(cppProgram);
-                        }
 
                         var unityEditor = new UnityEditor();
 
