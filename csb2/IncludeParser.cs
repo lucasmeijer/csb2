@@ -60,10 +60,8 @@ namespace csb2
 
         public IEnumerable<NPath> FindIncludedFiles(NPath file, NPath[] includeDirectories)
         {
-            var key = new StringBuilder(file.ToString());
-            foreach (var i in includeDirectories)
-                key.Append(i);
-            var cacheKey = key.ToString();
+            var allIncludes = includeDirectories.ConcatAll();
+            var cacheKey = file.ToString() + allIncludes;
 
 
             NPath[] result;
@@ -78,8 +76,10 @@ namespace csb2
             while (toProcess.Any())
             {
                 var f = toProcess.Dequeue();
-                
-                var directlyIncludedFiles = FindDirectlyIncludedFiles(f, includeDirectories, cacheKey);
+
+                var cacheKey2 = f.ToString() + allIncludes;
+
+                var directlyIncludedFiles = FindDirectlyIncludedFiles(f, includeDirectories, cacheKey2);
                 foreach(var includedFile in directlyIncludedFiles)
                     if (!results.Contains(includedFile))
                     {
@@ -99,20 +99,15 @@ namespace csb2
         NPath[] FindDirectlyIncludedFiles(NPath file, NPath[] includeDirectories, string cacheKey)
         {
             NPath[] result;
-            var key = file.ToString()+cacheKey;
-            
-            if (_directlyIncludedFilesCache.TryGetValue(key, out result))
-            {
-                Console.WriteLine("Hit"+hit++);
+
+            if (_directlyIncludedFilesCache.TryGetValue(cacheKey, out result))
                 return result;
-            }
             var headerNames = Parse(file);
 
             result = headerNames.Select(headerName => Resolve(headerName, file.Parent, includeDirectories)).Where(includedFile => includedFile != null && !includedFile.ToString().Contains("Program Files")).ToArray();
 
-            if (!_directlyIncludedFilesCache.TryAdd(key, result))
-                Console.WriteLine("Failed add");
-
+            _directlyIncludedFilesCache.TryAdd(cacheKey, result);
+                
             return result;
         }
     }

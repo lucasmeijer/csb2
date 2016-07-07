@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using csb2.Caching;
+using Mono.Options;
 using NiceIO;
 using Unity.TinyProfiling;
 
@@ -19,12 +20,53 @@ namespace csb2
             {
                 TinyProfiler.ConfigureOutput(new NPath("c:/test/profiler.svg"), "csb");
                 var projects = new NPath("c:/test/projects");
+                
+                bool runCacheServer = false;
+                CacheMode cacheMode = CacheMode.None;
+                var cacheDirectory = new NPath("c:/test2/cache");
 
-                var startCacheServer = Task.Run(() =>
+                // thses are the available options, not that they set the variables
+                var options = new OptionSet
                 {
-                    using (TinyProfiler.Section("Start CacheServer"))
-                        new CachingServer().Start(new NPath("c:/test/cache"));
-                });
+                    {"runCacheServer", "Run a cache server", v => runCacheServer = v != null},
+                    {"cacheDirectory", "Directory for the cacheserver to store its cache", s => cacheDirectory = new NPath(s) },
+                    {
+                        "cacheMode", "Sets cachemode. valid options: r,w,rw,n", (v) =>
+                        {
+                            switch (v)
+                            {
+                                case "n":
+                                    cacheMode = CacheMode.None;
+                                    break;
+                                case "r":
+                                    cacheMode = CacheMode.Read;
+                                    break;
+                                case "w":
+                                    cacheMode = CacheMode.Write;
+                                    break;
+                                case "rw":
+                                    cacheMode = CacheMode.Read | CacheMode.Write;
+                                    break;
+                                default:
+                                    throw new ArgumentException("Only valid values for cacheMode are r/w/rw/n");
+                            }
+                        }
+                    }
+                };
+
+                options.Parse(args);
+
+                CachingClient.CacheMode = cacheMode;
+
+                if (runCacheServer)
+                {
+                        using (TinyProfiler.Section("Start CacheServer"))
+                            new CachingServer().Start(cacheDirectory);
+
+                        while(true)
+                            System.Threading.Thread.Sleep(TimeSpan.FromDays(100));
+                }
+
                 List<CppProgram> cppPrograms;
                 
                 var loadDB = Task.Run(() =>
@@ -56,7 +98,7 @@ namespace csb2
                     _fileHashProvider = new FileHashProvider(new NPath("c:/test/hashdatabase")); 
                 });
 
-                Task.WaitAll(loadDB, setupDepgraph, loadFileHashProvider, startCacheServer);
+                Task.WaitAll(loadDB, setupDepgraph, loadFileHashProvider);
 
                 var builder = new Builder(_previousBuildsDatabase, _fileHashProvider);
                 using (TinyProfiler.Section("Build"))

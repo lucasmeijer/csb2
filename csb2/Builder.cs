@@ -167,7 +167,7 @@ namespace csb2
                             {
                                 nodeToBuild.SetUpdateReason(updateReason);
                                 var generatedFileNode = nodeToBuild as GeneratedFileNode;
-                                if (generatedFileNode != null && generatedFileNode.SupportsNetworkCache && CachingClient.Enabled)
+                                if (generatedFileNode != null && generatedFileNode.SupportsNetworkCache && CachingClient.CacheMode.HasFlag(CacheMode.Read))
                                 {
                                     //calculate summary on workerthread;
                                     var summary = generatedFileNode.InputsSummary;

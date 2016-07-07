@@ -11,6 +11,14 @@ using Unity.TinyProfiling;
 
 namespace csb2
 {
+    [Flags]
+    enum CacheMode
+    {
+        None = 0,
+        Read = 1,
+        Write= 2
+    }
+
     class CachingClient
     {
         private readonly Builder _builder;
@@ -27,7 +35,7 @@ namespace csb2
             cacheThread.Start();
         }
 
-        public static bool Enabled { get; set; } = false;
+        public static CacheMode CacheMode { get; set; } = CacheMode.Read;
 
 
         public void Queue(GeneratedFileNode node)
@@ -87,7 +95,7 @@ namespace csb2
                 }
                 catch (WebException)
                 {
-                    if (Enabled)
+                    if (CacheMode.HasFlag(CacheMode.Read))
                     {
                         _errors++;
                         if (_errors > 2)
@@ -122,7 +130,7 @@ namespace csb2
 
         private void ShutDown()
         {
-            Enabled = false;
+            CacheMode = CacheMode.None;
             GeneratedFileNode[] jobs;
             lock (_cacheJobLock)
             {

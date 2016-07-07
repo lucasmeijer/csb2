@@ -56,7 +56,7 @@ namespace csb2
 
             var jobResult = BuildGeneratedFile();
 
-            if (SupportsNetworkCache && jobResult.ResultState == State.Built && CachingClient.Enabled)
+            if (SupportsNetworkCache && jobResult.ResultState == State.Built && CachingClient.CacheMode.HasFlag(CacheMode.Write))
                 CachingClient.Store(InputsSummary.Hash, File, jobResult.Output);
 
             return jobResult;
