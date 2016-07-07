@@ -4,3 +4,4 @@ csb2.Tests/bin
 csb2.Tests/obj
 packages
 .vs
+csb2/csb2.csproj.user

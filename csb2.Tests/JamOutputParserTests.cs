@@ -107,7 +107,7 @@ namespace csb2.Tests
                 }
                 cs.AppendLine("},");*/
                 
-                var skipflags = new[] {"/D", "/I", "/Fo", "/Fd", "/c", "/Fp", "/Yc", "/Yl","/Yu","/DEBUG"};
+                var skipflags = new[] {"/D", "/I", "/Fo", "/Fd", "/c", "/Fp", "/Yc", "/Yl","/Yu","/DEBUG","/Z7"};
                 var restFlags = flags.Where(f => !skipflags.Any(f.StartsWith)).Distinct().ToArray();
 
                 cs.AppendLine($"\t\t{GetFieldNameFor(restFlags, _flagsSets, "_flags")}");

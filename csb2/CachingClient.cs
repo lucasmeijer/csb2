@@ -26,6 +26,7 @@ namespace csb2
         private readonly object _cacheJobLock = new object();
         private readonly Queue<GeneratedFileNode> m_CacheJobs = new Queue<GeneratedFileNode>();
         private int _errors;
+        private List<Task> _tasks;
 
         public CachingClient(Builder builder)
         {
@@ -75,7 +76,8 @@ namespace csb2
                         job = m_CacheJobs.Dequeue();
                        
                     }
-                    Task.Run(() => HandleCacheJob(job));
+                    _tasks.Add(Task.Run(() => HandleCacheJob(job)));
+                    _tasks.RemoveAll(t => t.IsCompleted && !t.IsFaulted);
                 }
             }
         }
@@ -86,6 +88,7 @@ namespace csb2
             {
                 var inputsSummary = job.InputsSummary;
                 var client = new JsonServiceClient(CachingServer.Url);
+                client.Timeout = TimeSpan.FromSeconds(30);
 
                 CacheResponse result = new CacheResponse() {Files = new List<FilePayLoad>()};
                 try

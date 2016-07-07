@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Funq;
 using NiceIO;
 using ServiceStack;
 using Unity.TinyProfiling;
@@ -10,14 +11,14 @@ using Unity.TinyProfiling;
 namespace csb2.Caching
 {
     [Route("/cache/{key}")]
-    class CacheRequest : IReturn<CacheResponse>
+    public class CacheRequest : IReturn<CacheResponse>
     {
         public string Name { get; set; }
         public string Key { get; set; }
     }
 
     [Route("/cachestore")]
-    class CacheStore : IReturn<CacheResponse>
+    public class CacheStore : IReturn<CacheResponse>
     {
         public string Name { get; set; }
         public string Key { get; set; }
@@ -25,7 +26,7 @@ namespace csb2.Caching
         public List<FilePayLoad> Files { get; set; }
     }
 
-    class FilePayLoad
+    public class FilePayLoad
     {
         public string Name { get; set; }
         public byte[] Content { get; set; }
@@ -43,77 +44,77 @@ namespace csb2.Caching
         public class AppHost : AppSelfHostBase
         {
             public AppHost()
-              : base("HttpListener Self-Host", typeof(CachingServer).Assembly)
+              : base("HttpListener Self-Host",typeof(CachingService).Assembly)
             { }
 
-            public override void Configure(Funq.Container container)
+            public override void Configure(Container container)
             {
-                
-            }
-        }
-
-
-        public class HelloService : Service
-        {
-            public static NPath _cachePath;
-            
-            public object Any(CacheRequest request)
-            {
-                //using (TinyProfiler.Section("CacheServer " + request.Name))
-                {
-                    var result = new CacheResponse();
-                    var cacheEntryDir = CacheEntryDirFor(request.Key);
-                    if (!cacheEntryDir.DirectoryExists())
-                        return result;
-
-                    foreach (var file in cacheEntryDir.Files())
-                        result.Files.Add(new FilePayLoad() {Name = file.FileName, Content = file.ReadAllBytes()});
-
-                    return result;
-                }
-            }
-
-            private static NPath CacheEntryDirFor(string key)
-            {
-                return _cachePath.Combine(key.Substring(0,3), key);
-            }
-
-            public object Any(CacheStore storeRequest)
-            {
-                //using (TinyProfiler.Section("CacheServerStore " + storeRequest.Name))
-                {
-                    var cacheEntryDir = CacheEntryDirFor(storeRequest.Key);
-                    if (cacheEntryDir.Exists()) 
-                    {
-                        Console.WriteLine("Getting a store request that we already have. very fishy! "+storeRequest.Name);
-                        return null;
-                    }
-
-                    cacheEntryDir.EnsureDirectoryExists();
-
-                    foreach (var file in storeRequest.Files)
-                        cacheEntryDir.Combine(file.Name).WriteAllBytes(file.Content);
-                    return null;
-                }
             }
         }
 
 
         public void Start(NPath nPath)
         {
-            HelloService._cachePath = nPath.EnsureDirectoryExists();
+            CachingService._cachePath = nPath.EnsureDirectoryExists();
 
           
             var appHost = new AppHost()
                 .Init()
                 .Start(Url);
 
-            Console.WriteLine("Starting Cacheserver at " + appHost.Config.WebHostUrl);
+            Console.WriteLine("Starting Cacheserver at " + Url);
+        }
+        
+        public static string Url { get; set; } = "http://localhost:8080/";
+    }
+
+    public class CachingService : Service
+    {
+        public CachingService()
+        {
+            Console.WriteLine("ServiceStart");
         }
 
-        
+        public static NPath _cachePath;
+            
+        public object Any(CacheRequest request)
+        {
+            //using (TinyProfiler.Section("CacheServer " + request.Name))
+            {
+                var result = new CacheResponse();
+                var cacheEntryDir = CacheEntryDirFor(request.Key);
+                if (!cacheEntryDir.DirectoryExists())
+                    return result;
 
-        public static string Url { get; set; } = "http://*:8080";
+                foreach (var file in cacheEntryDir.Files())
+                    result.Files.Add(new FilePayLoad() {Name = file.FileName, Content = file.ReadAllBytes()});
+
+                return result;
+            }
+        }
+
+        private static NPath CacheEntryDirFor(string key)
+        {
+            return _cachePath.Combine(key.Substring(0,3), key);
+        }
+
+        public object Any(CacheStore storeRequest)
+        {
+            //using (TinyProfiler.Section("CacheServerStore " + storeRequest.Name))
+            {
+                var cacheEntryDir = CacheEntryDirFor(storeRequest.Key);
+                if (cacheEntryDir.Exists()) 
+                {
+                    Console.WriteLine("Getting a store request that we already have. very fishy! "+storeRequest.Name);
+                    return null;
+                }
+
+                cacheEntryDir.EnsureDirectoryExists();
+
+                foreach (var file in storeRequest.Files)
+                    cacheEntryDir.Combine(file.Name).WriteAllBytes(file.Content);
+                return null;
+            }
+        }
     }
-    
 }

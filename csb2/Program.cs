@@ -21,6 +21,7 @@ namespace csb2
 				TinyProfiler.ConfigureOutput(NPath.CurrentDirectory.Combine("profiler.svg"), "csb");
                 
                 bool runCacheServer = false;
+            
                 CacheMode cacheMode = CacheMode.None;
                 var cacheDirectory = new NPath("c:/test2/cache");
                 
@@ -29,14 +30,15 @@ namespace csb2
                 var options = new OptionSet
                 {
                     {"runCacheServer", "Run a cache server", v => runCacheServer = v != null},
-					{"cacheDirectory=", "Directory for the cacheserver to store its cache", s => {
+                     {"runRemoteCompilationService", "Run a remote compilation service", v => RemoteCompilationService.Enabled = v != null},
+                    {"cacheDirectory=", "Directory for the cacheserver to store its cache", s => {
 							Console.WriteLine(s);
 							cacheDirectory = new NPath(s);
 							Console.WriteLine(cacheDirectory);
 						}},
                     {
                         "cacheServerURL=", "Sets the cache server url", s=>CachingServer.Url = s},
-                    { "cacheMode", "Sets cachemode. valid options: r,w,rw,n", (v) =>
+                    { "cacheMode=", "Sets cachemode. valid options: r,w,rw,n", (v) =>
                         {
                             switch (v)
                             {
@@ -63,11 +65,9 @@ namespace csb2
 
                 CachingClient.CacheMode = cacheMode;
 
-				Console.WriteLine("CacheDirectory: "+cacheDirectory);
-
-                if (runCacheServer)
+                if (runCacheServer || RemoteCompilationService.Enabled)
                 {
-                        using (TinyProfiler.Section("Start CacheServer"))
+                        using (TinyProfiler.Section($"Start CacheServer with dir {cacheDirectory}"))
                             new CachingServer().Start(cacheDirectory);
 
                         while(true)

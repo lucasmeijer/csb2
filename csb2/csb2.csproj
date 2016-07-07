@@ -98,6 +98,7 @@
     <Compile Include="JamOutputParser.cs" />
     <Compile Include="LumpSourceFile.cs" />
     <Compile Include="Palette.cs" />
+    <Compile Include="RemoteCompilationService.cs" />
     <Compile Include="SourceFileNode.cs" />
     <Compile Include="Msvc10Installation.cs" />
     <Compile Include="Msvc12Installation.cs" />
