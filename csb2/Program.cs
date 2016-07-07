@@ -23,6 +23,7 @@ namespace csb2
                 bool runCacheServer = false;
                 CacheMode cacheMode = CacheMode.None;
                 var cacheDirectory = new NPath("c:/test2/cache");
+                
 
                 // thses are the available options, not that they set the variables
                 var options = new OptionSet
@@ -34,7 +35,8 @@ namespace csb2
 							Console.WriteLine(cacheDirectory);
 						}},
                     {
-                        "cacheMode", "Sets cachemode. valid options: r,w,rw,n", (v) =>
+                        "cacheServerURL=", "Sets the cache server url", s=>CachingServer.Url = s},
+                    { "cacheMode", "Sets cachemode. valid options: r,w,rw,n", (v) =>
                         {
                             switch (v)
                             {

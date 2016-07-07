@@ -103,13 +103,17 @@ namespace csb2.Caching
         {
             HelloService._cachePath = nPath.EnsureDirectoryExists();
 
-            new AppHost()
+          
+            var appHost = new AppHost()
                 .Init()
                 .Start(Url);
 
+            Console.WriteLine("Starting Cacheserver at " + appHost.Config.WebHostUrl);
         }
 
-        public static string Url => "http://localhost:1337/";
+        
+
+        public static string Url { get; set; } = "http://*:8080";
     }
     
 }
