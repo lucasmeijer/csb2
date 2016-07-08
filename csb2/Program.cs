@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using csb2.Caching;
 using Mono.Options;
@@ -72,6 +73,9 @@ namespace csb2
                     CachingService.CacheDirectory = cacheDirectory.EnsureDirectoryExists();
                     using (TinyProfiler.Section($"Start CacheServer with dir {cacheDirectory}"))
                             new HttpServer().Start();
+
+                    while (true)
+                        Thread.Sleep(1000);
                 }
 					                
                 var loadDB = Task.Run(() =>
