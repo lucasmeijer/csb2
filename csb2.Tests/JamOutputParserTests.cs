@@ -61,7 +61,7 @@ namespace csb2.Tests
                     continue;
                 if (processed.Contains(cpp))
                     continue;
-              //  if (cpp.Contains("videoInput"))
+                //  if (cpp.Contains("videoInput"))
                 //    continue;
                 processed.Add(cpp);
 
@@ -73,13 +73,21 @@ namespace csb2.Tests
                 var outputPath = new NPath(parser.StripFullyQuoted(substring));
                 var outputObjFile = outputPath.Combine(file.FileName).ChangeExtension(".obj");
 
-              
+
                 cs.AppendLine($"yield return (new ObjectNode(");
                 cs.AppendLine($"\t\tnew SourceFileNode(new NPath(\"{file.ToString(SlashMode.Forward)}\")), ");
                 cs.AppendLine($"\t\tnew NPath(\"{outputObjFile.ToString(SlashMode.Forward)}\"),");
 
 
-                var includeDirs = flags.Where(f => f.StartsWith("/I")).Select(s3=>parser.StripFullyQuoted(s3.Substring(2)))/*.Where(s => !s.Contains("Program Files"))*/.Distinct().Select(s2 => new NPath(s2));
+                var includeDirs =
+                    flags.Where(f => f.StartsWith("/I"))
+                        .Select(s3 => parser.StripFullyQuoted(s3.Substring(2))) /*.Where(s => !s.Contains("Program Files"))*/
+                        .Distinct()
+                        .Select(s2 => new NPath(s2))
+                        .ToArray();
+
+                if (cpp.Contains("videoInput"))
+                    includeDirs = new[] {includeDirs[includeDirs.Length - 2], includeDirs[includeDirs.Length - 1]}.Concat(includeDirs).ToArray();
 
                 var fieldName = GetFieldNameFor(includeDirs, _includeSets, "_includes");
 
@@ -134,8 +142,8 @@ namespace csb2.Tests
                 {
                     if (includeDir.ToString() == ".")
                         continue;
-                    if (includeDir.ToString().Contains("dshow/include"))
-                        continue;
+                   // if (includeDir.ToString().Contains("dshow/include"))
+                     //   continue;
                     cs.AppendLine($"\t\tnew NPath(\"{includeDir.ToString(SlashMode.Forward)}\"),");
                 }
                 cs.AppendLine("};");

@@ -84,7 +84,7 @@
   <ItemGroup>
     <Compile Include="Architecture.cs" />
     <Compile Include="Builder.cs" />
-    <Compile Include="CachingServer.cs" />
+    <Compile Include="CachingService.cs" />
     <Compile Include="CachingClient.cs" />
     <Compile Include="CppProgram.cs" />
     <Compile Include="ExeNode.cs" />
@@ -93,6 +93,7 @@
     <Compile Include="GeneratedFileNode.cs" />
     <Compile Include="GraphMaker.cs" />
     <Compile Include="Hashing.cs" />
+    <Compile Include="HttpServer.cs" />
     <Compile Include="IncludeParser.cs" />
     <Compile Include="JamOutput.cs" />
     <Compile Include="JamOutputParser.cs" />

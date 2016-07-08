@@ -27,6 +27,8 @@ namespace csb2
             }
         }
 
+        public bool CanDistribute { get; set; } = false;
+
         public override UpdateReason DetermineNeedToBuild(PreviousBuildsDatabase db)
         {
             NPath file = File;
@@ -70,6 +72,16 @@ namespace csb2
         protected abstract JobResult BuildGeneratedFile();
 
         protected abstract InputsSumary CalculateInputsSummary();
+
+        public virtual CompilationRequest MakeDistributionRequest()
+        {
+            throw new NotImplementedException();
+        }
+
+        public virtual JobResult ProcessDistributionResponse(CompilationResponse response)
+        {
+            throw new NotImplementedException();
+        }
     }
 
 }

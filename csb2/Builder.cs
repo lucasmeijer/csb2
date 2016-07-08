@@ -7,7 +7,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using csb2.Caching;
 using NiceIO;
+using ServiceStack;
 using Unity.TinyProfiling;
 
 namespace csb2
@@ -34,6 +37,7 @@ namespace csb2
         private CachingClient _cachingClient;
 
         public ConcurrentQueue<JobResult> _completedJobs = new ConcurrentQueue<JobResult>();
+     
 
         public Builder(PreviousBuildsDatabase previousBuildsDatabase, FileHashProvider _fileHashProvider)
         {
@@ -130,6 +134,7 @@ namespace csb2
             }
             return processedAny;
         }
+        
 
         void WorkerThread(object indexObject)
         {
@@ -174,7 +179,14 @@ namespace csb2
                                     _cachingClient.Queue(generatedFileNode);
                                 }
                                 else
-                                    BuildNode(nodeToBuild, job, workedThreadIndex);
+                                {
+                                    if (generatedFileNode.CanDistribute && RemoteJobsCounter.Value < 5)
+                                    {
+                                        DistributeNode(generatedFileNode);
+                                    }
+                                    else
+                                        BuildNode(nodeToBuild, job, workedThreadIndex);
+                                }
                             }
                             break;
                         case State.CacheLoadFailed:
@@ -187,6 +199,56 @@ namespace csb2
 
                 }
             }    
+        }
+
+        class RemoteJobsCounter : IDisposable
+        {
+            private static int counter;
+
+            public static int Value => counter;
+           
+            public RemoteJobsCounter()
+            {
+                Interlocked.Increment(ref counter);
+            }
+
+            public void Dispose()
+            {
+                Interlocked.Decrement(ref counter);
+            }
+        }
+
+        private void DistributeNode(GeneratedFileNode generatedFileNode)
+        {
+            CompilationRequest remoteRequest = generatedFileNode.MakeDistributionRequest();
+
+            if (remoteRequest == null)
+            {
+                QueueJob(generatedFileNode);
+                return;
+            }
+            var jsonClient = new JsonServiceClient(Program.UseRemoteCompilationService);
+            JobResult jobResult;
+
+            using (TinyProfiler.Section("Distribute",generatedFileNode.File.FileName))
+            using (new RemoteJobsCounter())
+            { 
+                try
+                {
+                    var response = jsonClient.Post(remoteRequest);
+                    jobResult = generatedFileNode.ProcessDistributionResponse(response);
+
+                }
+                catch (Exception e)
+                {
+                    if (!(e is WebServiceException))
+                        Console.WriteLine("Caught application while processing distribution response: " + e.ToString());
+                    generatedFileNode.CanDistribute = false;
+                    QueueJob(generatedFileNode);
+                    return;
+                }
+            }
+            CompletedJob(jobResult);
         }
 
         public void CompletedJob(JobResult jobResult)
@@ -208,7 +270,7 @@ namespace csb2
 
         public void LogJobResult(JobResult jobResult)
         {
-            Console.Write("\r                                                           \r");
+            //Console.Write("\r                                                           \r");
 
             var nodeIdentifier = $" [{jobResult.Node.NodeTypeIdentifier}]".PadRight(9);
             var paddedWorkerIdentifier = $"{jobResult.Source.PadRight(7)}>";
@@ -223,7 +285,7 @@ namespace csb2
             if (!string.IsNullOrEmpty(jobResult.Output))
                 Console.WriteLine(jobResult.Output.Length > 4000 ? jobResult.Output.Substring(0, 2000) + "\n\n<<SNIPPED>>\n\n" + jobResult.Output.Substring(jobResult.Output.Length-2000) : jobResult.Output);
 
-
+            /*
             var percentage = 100 - (int) (100.0f*_remainingEstimatedCost/_totalEstimatedCost);
 
             var bar = new StringBuilder();
@@ -236,7 +298,7 @@ namespace csb2
                     bar.Append("-");
             }
 
-            Console.Write($"\r[{bar}] {percentage}%");
+            Console.Write($"\r[{bar}] {percentage}%");*/
         }
 
         private ProgressState DoPass(Node nodeToBuild, out int remaininCost)

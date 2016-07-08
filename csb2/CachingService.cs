@@ -3,21 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Funq;
 using NiceIO;
 using ServiceStack;
 using Unity.TinyProfiling;
 
 namespace csb2.Caching
 {
-    [Route("/cache/{key}")]
+    [Route("/cache/{key}", "GET")]
     public class CacheRequest : IReturn<CacheResponse>
     {
         public string Name { get; set; }
         public string Key { get; set; }
     }
 
-    [Route("/cachestore")]
+    [Route("/cache", "POST")]
     public class CacheStore : IReturn<CacheResponse>
     {
         public string Name { get; set; }
@@ -37,45 +36,10 @@ namespace csb2.Caching
         public List<FilePayLoad> Files { get; set; } = new List<FilePayLoad>();
         public string Output { get; set; }
     }
-    
-    class CachingServer
-    {
-        //Define the Web Services AppHost
-        public class AppHost : AppSelfHostBase
-        {
-            public AppHost()
-              : base("HttpListener Self-Host",typeof(CachingService).Assembly)
-            { }
-
-            public override void Configure(Container container)
-            {
-            }
-        }
-
-
-        public void Start(NPath nPath)
-        {
-            CachingService._cachePath = nPath.EnsureDirectoryExists();
-
-          
-            var appHost = new AppHost()
-                .Init()
-                .Start(Url);
-
-            Console.WriteLine("Starting Cacheserver at " + Url);
-        }
-        
-        public static string Url { get; set; } = "http://localhost:8080/";
-    }
 
     public class CachingService : Service
     {
-        public CachingService()
-        {
-            Console.WriteLine("ServiceStart");
-        }
-
-        public static NPath _cachePath;
+        public static NPath CacheDirectory { get; set; }
             
         public object Any(CacheRequest request)
         {
@@ -95,7 +59,7 @@ namespace csb2.Caching
 
         private static NPath CacheEntryDirFor(string key)
         {
-            return _cachePath.Combine(key.Substring(0,3), key);
+            return CacheDirectory.Combine(key.Substring(0,3), key);
         }
 
         public object Any(CacheStore storeRequest)

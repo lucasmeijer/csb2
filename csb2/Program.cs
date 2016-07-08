@@ -13,6 +13,7 @@ namespace csb2
         private static PreviousBuildsDatabase _previousBuildsDatabase;
         private static AliasNode _nodeToBuild;
         private static FileHashProvider _fileHashProvider;
+        public static string CachingServerToUse { get; set; } = "http://localhost:8080";
 
         static void Main(string[] args)
         {
@@ -30,14 +31,15 @@ namespace csb2
                 var options = new OptionSet
                 {
                     {"runCacheServer", "Run a cache server", v => runCacheServer = v != null},
-                     {"runRemoteCompilationService", "Run a remote compilation service", v => RemoteCompilationService.Enabled = v != null},
+                    {"runRemoteCompilationService", "Run a remote compilation service", v => RemoteCompilationService.Enabled = v != null},
+                    {"useRemoteCompilationService=", "URL of the remote compialtion service to use", v=>UseRemoteCompilationService = v},
                     {"cacheDirectory=", "Directory for the cacheserver to store its cache", s => {
 							Console.WriteLine(s);
 							cacheDirectory = new NPath(s);
 							Console.WriteLine(cacheDirectory);
 						}},
                     {
-                        "cacheServerURL=", "Sets the cache server url", s=>CachingServer.Url = s},
+                        "cacheServerURL=", "Sets the cache server url", s=>CachingServerToUse = s},
                     { "cacheMode=", "Sets cachemode. valid options: r,w,rw,n", (v) =>
                         {
                             switch (v)
@@ -67,11 +69,9 @@ namespace csb2
 
                 if (runCacheServer || RemoteCompilationService.Enabled)
                 {
-                        using (TinyProfiler.Section($"Start CacheServer with dir {cacheDirectory}"))
-                            new CachingServer().Start(cacheDirectory);
-
-                        while(true)
-                            System.Threading.Thread.Sleep(TimeSpan.FromHours(1));
+                    CachingService.CacheDirectory = cacheDirectory.EnsureDirectoryExists();
+                    using (TinyProfiler.Section($"Start CacheServer with dir {cacheDirectory}"))
+                            new HttpServer().Start();
                 }
 					                
                 var loadDB = Task.Run(() =>
@@ -115,6 +115,8 @@ namespace csb2
 
             }
         }
+
+        public static string UseRemoteCompilationService { get; set; } = "Http://localhost:8080";
     }
 }
 

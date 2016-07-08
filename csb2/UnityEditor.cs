@@ -15,7 +15,7 @@ namespace csb2
             var objectNodes = new ObjectNode[0];
 
             using (TinyProfiler.Section("GetJamOutput"))
-                objectNodes = JamOutput.GetObjectNodes().ToArray();
+                objectNodes = JamOutput.GetObjectNodes().Where(o=>!o.CppFile.File.FileName.Contains("EditorExtensionRegistrar")).ToArray();
 
 
             var jamParser = new JamOutputParser();
@@ -91,6 +91,7 @@ namespace csb2
             var exeNode = new ExeNode(exeFile, lumpObjects, staticLibs, linkFlags);
 
             SetStaticDependencies(exeNode);
+            //SetStaticDependencies(lumpObjects.Take(700).ToArray());
         }
 
         private IEnumerable<ObjectNode> LumpObjectsFor(ObjectNode[] objectNodes)
@@ -101,7 +102,7 @@ namespace csb2
                 "AnnotationManager", "SpatialSurface","AssetProgressbar","ColorByVelocity", "ColorModule","Speech","BuildInfoEvent","EditorModules","Importer.obj","BugReportingTools","WorldAnchorDeserialization","TextRenderingModule","CrashReporting","EnlightenPrecomp","yaml","RepaintController",
                 "SystemInfo","wow64","UsbDevices","CachingManager","ShaderUpgraderUtils","CollabTests","Metrics","GizmoUtil","PlatformDependent\\Win","FloatStringConversion","Collab\\Tests","ImageOperations","TextureImporting","Mesh3DS","LicenseActivation","Platform\\Windows","EditorSettings",
 
-                "ProjectVersion","EditorUserSettings","MenuController","ManagerBackup","PolygonEditor","GUIViewBindings"
+                "ProjectVersion","EditorUserSettings","MenuController","ManagerBackup","PolygonEditor","GUIViewBindings","Graphics\\Enlighten","ProbeSet","freetype2"
             };
 
             var split = objectNodes.GroupBy(o => blacklist.Any(o.ToString().Contains));

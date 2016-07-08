@@ -24,6 +24,7 @@ namespace csb2
             Defines = defines;
             Flags = flags;
             SetStaticDependencies(CppFile);
+            CanDistribute = true;
         }
 
         protected override JobResult BuildGeneratedFile()
@@ -31,47 +32,57 @@ namespace csb2
             var includeArguments = new StringBuilder();
 
             foreach (var includeDir in AllIncludeDirectories)
-                includeArguments.Append("-I" + includeDir.InQuotes() + " ");
+                includeArguments.Append("/I" + includeDir.InQuotes() + " ");
 
-            var cl = MsvcInstallation.GetInstallation(new Version(10, 0)).GetVSToolPath(new x64Architecture(), "cl.exe").ToString();
+            var cl = ClExe;
 
-            var fullArgs = new Shell.ExecuteArgs {Arguments = includeArguments + " " + DefineAndFlagArguments() + " /nologo /Fo" + File.InQuotes(SlashMode.Forward) + " " + CppFile.File.InQuotes(SlashMode.Forward), Executable = cl};
+            var inputAndOutputFile = new[] {$"/Fo{File.InQuotes(SlashMode.Forward)}", CppFile.File.InQuotes()};
+
+            var exeArgs = new Shell.ExecuteArgs
+            {
+                Arguments = InputSignatureFlags.Concat(inputAndOutputFile).SeperateWithSpace(),
+                Executable = cl,
+                EnvVars = new Dictionary<string, string>() {{"INCLUDE", ToolChainIncludeDirectories.SeperateWith(";")}}
+            };
 
             Shell.ExecuteResult executeResult;
             using (TinyProfiler.Section("CompileFull " + CppFile.File))
-                executeResult = Shell.Execute(fullArgs);
-
-            var output = executeResult.StdOut + executeResult.StdErr;
-
-            if (output.StartsWith(CppFile.File.FileName))
-                output = output.Substring(File.FileName.Length).Trim();
-
-            return new JobResult()
-            {
-                BuildInfo = new PreviousBuildsDatabase.Entry() {File = Name, TimeStamp = File.TimeStamp, InputsSummary = InputsSummary},
-                ResultState =  executeResult.ExitCode == 0 ? State.Built : State.Failed,
-                Output = output,
-                Input = fullArgs.Arguments,
-                Node = this
-            };
-
+                executeResult = Shell.Execute(exeArgs);
+            
+            return new JobResult() {BuildInfo = MakeBuildInfo(), ResultState = executeResult.ExitCode == 0 ? State.Built : State.Failed, Output = TrimCompilerOutput(executeResult.StdOut + executeResult.StdErr), Input = exeArgs.Arguments, Node = this};
         }
 
-        private string DefineAndFlagArguments()
+        private string TrimCompilerOutput(string output)
         {
-            var sb = new StringBuilder();
-
-            foreach (var define in Defines)
-                sb.Append("-D" + define+" ");
-            foreach (var flag in Flags)
-                sb.Append(flag + " ");
-            sb.Append(" /c ");
-            return sb.ToString();
+            if (!output.StartsWith(CppFile.File.FileName))
+                return output;
+            return output.Substring(File.FileName.Length).Trim();
         }
+
+        private IEnumerable<string> InputSignatureFlags => PreprocessorArguments.Concat(CodegenArguments);
+
+        private IEnumerable<string> CodegenArguments => Flags.Where(f=>!IsForceInclude(f)).Append("/c","/nologo");
+
+        private static bool IsForceInclude(string flag)
+        {
+            return flag.StartsWith("/FI");
+        }
+
+        private IEnumerable<string> PreprocessorArguments
+        {
+            get { return AllIncludeDirectories.Select(i => $"/I{i.InQuotes()}").Concat(Defines.Select(d => $"/D{d}")).Append("/nologo").Concat(Flags.Where(IsForceInclude)); }
+        }
+
+        private PreviousBuildsDatabase.Entry MakeBuildInfo()
+        {
+            return new PreviousBuildsDatabase.Entry() {File = Name, TimeStamp = File.TimeStamp, InputsSummary = InputsSummary};
+        }
+
+        private static string ClExe => MsvcInstallation.GetInstallation(new Version(10, 0)).GetVSToolPath(new x64Architecture(), "cl.exe").ToString();
 
         private IEnumerable<NPath> AllIncludeDirectories => IncludeDirs.Concat(ToolChainIncludeDirectories);
 
-        private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetInstallation(new Version(10,0)).GetIncludeDirectories();
+        private static IEnumerable<NPath> ToolChainIncludeDirectories => MsvcInstallation.GetInstallation(new Version(10, 0)).GetIncludeDirectories();
 
 
         public override bool SupportsNetworkCache => true;
@@ -89,7 +100,7 @@ namespace csb2
                 return new InputsSumary()
                 {
                     TargetFileName = File.ToString(),
-                    CommandLine = DefineAndFlagArguments(),
+                    CommandLine = PreprocessorArguments.Concat(CodegenArguments).ConcatAll(),
                     Dependencies = dependentfiles.Select(o => new FileSummary() {FileName = o.ToString(), Hash = FileHashProvider.Instance.HashFor(o), TimeStamp = o.TimeStamp}).ToArray()
                 };
             }
@@ -101,8 +112,50 @@ namespace csb2
         {
             yield return CppFile;
         }
-    }
 
+        public override CompilationRequest MakeDistributionRequest()
+        {
+            var preprocessOutput = NPath.SystemTemp.Combine("csb2", "p" + new System.Random().Next()).EnsureDirectoryExists().Combine(CppFile.File.FileName);
+
+            var inputAndOutputFile = new[] {"/P", $"/Fi{preprocessOutput.InQuotes(SlashMode.Forward)}", CppFile.File.InQuotes(SlashMode.Forward)};
+
+            var exeArgs = new Shell.ExecuteArgs {Arguments = PreprocessorArguments.Concat(inputAndOutputFile).SeperateWithSpace(), Executable = ClExe};
+
+            Shell.ExecuteResult executeResult;
+            using (TinyProfiler.Section("Preprocess: " + CppFile.File))
+                executeResult = Shell.Execute(exeArgs);
+
+            if (executeResult.ExitCode != 0)
+            {
+                CanDistribute = false;
+                return null;
+            }
+
+            return new CompilationRequest()
+            {
+                Arguments = CodegenArguments.SeperateWithSpace() + $" /c {CppFile.File.FileName} /Fo\"{CppFile.File.ChangeExtension("obj").FileName}\"",
+                Program = ClExe,
+                Contents = preprocessOutput.ReadAllBytes(),
+                FileName = CppFile.File.FileName
+            };
+        }
+
+        public override JobResult ProcessDistributionResponse(CompilationResponse response)
+        {
+            if (response.ExitCode == 0)
+                File.WriteAllBytes(response.Contents);
+
+            return new JobResult()
+            {
+                BuildInfo = MakeBuildInfo(),
+                Input = InputSignatureFlags.SeperateWithSpace(),
+                Node = this,
+                Output = TrimCompilerOutput(response.Output),
+                ResultState = response.ExitCode == 0 ? State.Built : State.Failed,
+                Source = response.SourceIdentifier
+            };
+        }
+    }
 
     public class UpdateReason
     {

@@ -26,7 +26,7 @@ namespace csb2
         private readonly object _cacheJobLock = new object();
         private readonly Queue<GeneratedFileNode> m_CacheJobs = new Queue<GeneratedFileNode>();
         private int _errors;
-        private List<Task> _tasks;
+        private List<Task> _tasks = new List<Task>();
 
         public CachingClient(Builder builder)
         {
@@ -87,7 +87,7 @@ namespace csb2
             using (TinyProfiler.Section("CacheClient " + job.Name))
             {
                 var inputsSummary = job.InputsSummary;
-                var client = new JsonServiceClient(CachingServer.Url);
+                var client = new JsonServiceClient(Program.CachingServerToUse);
                 client.Timeout = TimeSpan.FromSeconds(30);
 
                 CacheResponse result = new CacheResponse() {Files = new List<FilePayLoad>()};
@@ -157,7 +157,7 @@ namespace csb2
             Task.Run(() =>
             {
                 var cacheStore = new CacheStore() {Key = networkCacheKey, Name = file.FileName, Output = output, Files = new List<FilePayLoad>() {new FilePayLoad() {Name = file.FileName, Content = bytes}}};
-                var jsonServiceClient = new JsonServiceClient(CachingServer.Url) {Timeout = TimeSpan.FromSeconds(20)};
+                var jsonServiceClient = new JsonServiceClient(Program.CachingServerToUse) {Timeout = TimeSpan.FromSeconds(20)};
                 jsonServiceClient.Post(cacheStore);
             });
         }
